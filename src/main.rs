@@ -26,9 +26,9 @@ fn main() {
     println!("Cuda available: {}", tch::Cuda::is_available());
     println!("Cudnn available: {}", tch::Cuda::cudnn_is_available());
     println!("{}", t);
-    let t = Tensor::randn(&[1000], kind::FLOAT_CPU);
-    println!("{}", t);
-    let t = Tensor::randn(&[1000, 1000], kind::FLOAT_CPU);
-    println!("{}", t);
-    println!("{}", t * 100);
+    // let t = Tensor::randn(&[1000], kind::FLOAT_CPU);
+    // println!("{}", t);
+    // let t = Tensor::randn(&[1000, 1000], kind::FLOAT_CPU);
+    // println!("{}", t);
+    // println!("{}", t * 100);
 }
