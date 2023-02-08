@@ -1,57 +1,128 @@
-use std::borrow::Borrow;
-use tch::*;
-#[derive(Debug)]
-pub struct MultiHeadAttentionLayer {
-    pub w_q: nn::Linear,
-    pub w_k: nn::Linear,
-    pub w_v: nn::Linear,
-    pub n_heads: i64,
-    pub hid_size: i64,
-    pub scale: Tensor,
-}
+#![allow(dead_code)]
+use tch::{nn::SequentialT, *};
+fn conv2d_sublayer(
+    vs: &nn::Path,
+    in_channels: i64,
+    out_channels: i64,
+    kernel_size: i64,
+    stride: Option<i64>,
+    padding: Option<i64>,
+    bias: bool,
+) -> nn::SequentialT {
+    let padding = if let Some(val) = padding {
+        val
+    } else {
+        0 //default value
+    };
+    let stride = if let Some(val) = stride {
+        val
+    } else {
+        1 //default value
+    };
 
-pub fn mhal<'a, T: Borrow<nn::Path<'a>>>(
-    vs: T,
-    hid_size: i64,
-    n_heads: i64,
-) -> MultiHeadAttentionLayer {
-    let vs = vs.borrow();
-    let value: Tensor = Tensor::from(hid_size as f64).set_requires_grad(false);
-    MultiHeadAttentionLayer {
-        w_q: nn::linear(vs / "query", hid_size, hid_size, Default::default()),
-        w_k: nn::linear(vs / "keys", hid_size, hid_size, Default::default()),
-        w_v: nn::linear(vs / "values", hid_size, hid_size, Default::default()),
-        n_heads: n_heads,
-        hid_size: hid_size,
-        scale: value.sqrt(),
-    }
+    let conv2d_cfg = nn::ConvConfig {
+        stride: stride,
+        padding: padding,
+        bias: bias,
+        ..Default::default()
+    };
+    nn::seq_t()
+        .add(nn::conv2d(
+            vs / "conv2d",
+            in_channels,
+            out_channels,
+            kernel_size,
+            conv2d_cfg,
+        ))
+        .add_fn(|x| x.relu())
+        .add(nn::batch_norm2d(
+            vs / "norm2d",
+            out_channels,
+            Default::default(),
+        ))
 }
-impl MultiHeadAttentionLayer {
-    pub fn forward_t(
-        &self,
-        queries: &Tensor,
-        keys: &Tensor,
-        values: &Tensor,
-        mask: Option<&Tensor>,
-        train: bool
-    ) -> Tensor {
-        let batch_size = queries.size()[0];
-        let q = queries.apply(&self.w_q);
-        let k = keys.apply(&self.w_k);
-        let v = values.apply(&self.w_v);
-        let q = q.view((batch_size,-1,self.n_heads,self.hid_size / self.n_heads)).transpose(1, 2);
-        let k = k.view((batch_size,-1,self.n_heads,self.hid_size / self.n_heads)).transpose(1, 2).transpose(2, 3);
-        let v = v.view((batch_size,-1,self.n_heads,self.hid_size / self.n_heads)).transpose(1, 2);
-        let q : Tensor = q / self.scale;
-        let scores = if let Some(mask) = mask {
-            q.matmul(&k) + mask
-        } else {
-            q.matmul(&k)
-        };
-        let attention = scores
-        .softmax(-1, scores.kind());
-        let x = attention.matmul(&v);
-        let x = x.transpose(1, 2).flatten(2,3);
-        x
+fn regularization_layer<'a>(maxpool_kernel: i64, p: f64, dropout: bool) -> nn::FuncT<'a> {
+    nn::func_t(move |xs, train| {
+        let maxpool = xs.max_pool2d_default(maxpool_kernel);
+        if dropout {
+            let dropout = maxpool.dropout(p, train);
+            println!("{:?}, {:?}",dropout.size(),maxpool.size());
+            return maxpool + dropout;
+        }
+        maxpool
+    })
+}
+fn output_layer(
+    vs: &nn::Path,
+    in_channels: i64,
+    hid_channels: i64,
+    out_channels: i64,
+    maxpool_kernel: i64,
+) -> nn::SequentialT {
+    nn::seq_t()
+        .add(nn::linear(
+            vs / "linear1",
+            in_channels,
+            hid_channels,
+            Default::default(),
+        ))
+        .add_fn(|x| {println!("{:?}",x.size());x.relu()})
+        .add_fn(move |x| x.max_pool2d_default(maxpool_kernel).flat_view())
+        .add(nn::linear(
+            vs / "linear2",
+            hid_channels,
+            out_channels,
+            Default::default(),
+        ))
+}
+pub fn cnn_net(vs: &nn::Path) -> SequentialT {
+    nn::seq_t()
+        .add(conv2d_sublayer(
+            &vs.sub("conv1"),
+            3,
+            64,
+            3,
+            None,
+            Some(1),
+            true,
+        ))
+        .add(conv2d_sublayer(
+            &vs.sub("conv2"),
+            64,
+            64,
+            3,
+            None,
+            Some(1),
+            true,
+        ))
+        .add(regularization_layer(2, 0.25 as f64, true))
+        .add(conv2d_sublayer(
+            &vs.sub("conv3"),
+            64,
+            128,
+            3,
+            None,
+            Some(1),
+            true,
+        ))
+        .add(conv2d_sublayer(
+            &vs.sub("conv4"),
+            128,
+            128,
+            3,
+            Some(1),
+            Some(1),
+            true,
+        ))
+        .add(regularization_layer(2, 0.25 as f64, true))
+        .add(output_layer(&vs.sub("output"), 128, 512, 10, 2))
+}
+pub fn learning_rate(epoch: i64) -> f64 {
+    if epoch < 50 {
+        0.1
+    } else if epoch < 100 {
+        0.01
+    } else {
+        0.001
     }
 }
