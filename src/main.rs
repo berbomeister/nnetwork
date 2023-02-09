@@ -10,7 +10,15 @@ pub fn main() -> Result<()> {
     let m = tch::vision::cifar::load_dir("data")?;
     let vs = nn::VarStore::new(Device::cuda_if_available());
     // let net = fast_resnet(&vs.root());
-    let net = cnn_net(&vs.root());
+    // let net = cnn_net(&vs.root());
+    let mut user_input = String::new();
+    let stdin = std::io::stdin(); // We get `Stdin` here.
+    stdin.read_line(&mut user_input)?;
+    println!("{:?}",user_input.as_str().trim());
+    let net = match user_input.as_str().trim() {
+        "1" => fast_resnet(&vs.root()),
+        _ => cnn_net(&vs.root()),
+    };
     let mut opt = nn::Sgd {
         momentum: 0.9,
         dampening: 0.,
