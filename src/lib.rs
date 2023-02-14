@@ -1,7 +1,4 @@
-use std::str::FromStr;
-
-use anyhow::Ok;
-use anyhow::Result;
+use anyhow::{Ok,Result};
 use tch::nn::{ModuleT, OptimizerConfig, SequentialT};
 use tch::{nn, Device};
 
@@ -228,7 +225,7 @@ pub fn test() -> Result<()> {
     .build(&vs, 0.)?;
     for epoch in 1..35 {
         opt.set_lr(learning_rate(epoch));
-        for (i, (bimages, blabels)) in m
+        for (_i, (bimages, blabels)) in m
             .train_iter(64)
             .shuffle()
             .to_device(vs.device())
