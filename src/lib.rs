@@ -1,3 +1,5 @@
+use std::str::FromStr;
+
 use anyhow::Ok;
 use anyhow::Result;
 use tch::nn::{ModuleT, OptimizerConfig, SequentialT};
@@ -186,8 +188,6 @@ pub fn fast_resnet(vs: &nn::Path) -> SequentialT {
             Some(1),
             true,
         ))
-        // .add_fn(|x| x.max_pool2d_default(2))
-        // .add_fn(|x| x.max_pool2d_default(2))
         .add_fn(|x| x.max_pool2d_default(4))
         .add_fn_t(|x, train| x.dropout(0.25, train))
         .add(conv2d_sublayer(
@@ -218,6 +218,7 @@ pub fn test() -> Result<()> {
         "2" => fast_resnet2(&vs.root()),
         _ => cnn1(&vs.root()),
     };
+    // vs.load("models/model1.model")?;
     let mut opt = nn::Sgd {
         momentum: 0.9,
         dampening: 0.,
@@ -237,20 +238,21 @@ pub fn test() -> Result<()> {
             let pred = net.forward_t(&bimages, true);
             let loss = pred.cross_entropy_for_logits(&blabels);
             opt.backward_step(&loss);
-            if i % 100 == 0 {
-                let test_accuracy =
-                    net.batch_accuracy_for_logits(&m.test_images, &m.test_labels, vs.device(), 512);
-                println!(
-                    "epoch: {:4}, batch: {:5}, test acc: {:5.2}%",
-                    epoch,
-                    i,
-                    100. * test_accuracy,
-                );
-            }
+            // if i % 100 == 0 {
+            //     let test_accuracy =
+            //         net.batch_accuracy_for_logits(&m.test_images, &m.test_labels, vs.device(), 512);
+            //     println!(
+            //         "epoch: {:4}, batch: {:5}, test acc: {:5.2}%",
+            //         epoch,
+            //         i,
+            //         100. * test_accuracy,
+            //     );
+            // }
         }
         let test_accuracy =
             net.batch_accuracy_for_logits(&m.test_images, &m.test_labels, vs.device(), 512);
         println!("epoch: {:4} test acc: {:5.2}%", epoch, 100. * test_accuracy,);
     }
+    vs.save("models/fastnet1.model")?;
     Ok(())
 }
