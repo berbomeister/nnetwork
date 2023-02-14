@@ -51,15 +51,34 @@ pub fn main() -> () {
                     padding,
                     true,
                 ));
+            }else if input[1] == "maxpool" {
+                assert!(
+                    input.len() == 3,
+                    "{:?} - missing arguments",
+                    input.join(" ")
+                );
+                let kernel_size = i64::from_str_radix(input[2], 10).unwrap();
+                stack.push(Layer::Maxpool(kernel_size));
+            } else if input[1] == "dropout" {
+                assert!(
+                    input.len() == 3,
+                    "{:?} - missing arguments",
+                    input.join(" ")
+                );
+                let dropout = (input[2]).parse::<f64>().unwrap();
+                stack.push(Layer::Dropout(dropout));
+            } else if input[1] == "linear" {
+                assert!(
+                    input.len() == 4,
+                    "{:?} - missing arguments",
+                    input.join(" ")
+                );
+                let in_channels = (input[2]).parse::<i64>().unwrap();
+                let out_channels = (input[3]).parse::<i64>().unwrap();
+                stack.push(Layer::Linear(in_channels,out_channels));
+            } else {
+                panic!("unknown layer name");
             }
-        } else if input[0] == "maxpool" {
-            assert!(
-                input.len() == 3,
-                "{:?} - missing arguments",
-                input.join(" ")
-            );
-            let kernel_size = i64::from_str_radix(input[2], 10).unwrap();
-            stack.push(Layer::Maxpool(kernel_size));
         } else if input[0] == "end" {
             break;
         }
@@ -90,8 +109,9 @@ pub fn main() -> () {
     //     let _e = stdin.read_line(&mut user_input);
     //     input = &user_input.trim().split(" ").collect::<Vec<&str>>();
     // }
-    let model = stack.iter().fold(tch::nn::seq_t(), move |model, layer| {
-        match *layer {
+    let model = stack
+        .iter()
+        .fold(tch::nn::seq_t(), move |model, layer| match *layer {
             Layer::ConvLayer(in_channels, out_channels, kernel_size, stride, padding, bias) => {
                 model.add(conv2d_sublayer(
                     &vs.root(),
@@ -102,12 +122,16 @@ pub fn main() -> () {
                     Some(padding),
                     bias,
                 ))
-            },
+            }
             Layer::Maxpool(kernel) => model.add_fn(move |x| x.max_pool2d_default(kernel)),
-            Layer::Dropout(dropout) => model.add_fn_t(move |x,train| x.dropout(dropout, train)),
-            Layer::Linear(in_channels, out_channels) => model.add(tch::nn::linear(&vs.root(), in_channels, out_channels, Default::default())),
-        }
-    });
+            Layer::Dropout(dropout) => model.add_fn_t(move |x, train| x.dropout(dropout, train)),
+            Layer::Linear(in_channels, out_channels) => model.add(tch::nn::linear(
+                &vs.root(),
+                in_channels,
+                out_channels,
+                Default::default(),
+            )),
+        });
     println!("{:?}", model);
     //add conv_layer [in channels] [out channels] [kernel_size] [--default |  [stride] [padding]]
     // let model_arch = user_input.as_str().trim().split(" ").collect::<Vec<&str>>();
