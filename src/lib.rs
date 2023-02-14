@@ -1,7 +1,16 @@
-use anyhow::{Ok,Result};
-use tch::nn::{ModuleT, OptimizerConfig, SequentialT};
+use anyhow::{Ok, Result};
+use tch::nn::{ModuleT, OptimizerConfig, SequentialT, Optimizer};
+use tch::vision::dataset::Dataset;
 use tch::{nn, Device};
 
+#[derive(Debug)]
+enum Layer {
+    ConvLayer(i64, i64, i64, i64, i64, bool),
+    Maxpool(i64),
+    Dropout(f64),
+    Flatten(),
+    Linear(i64, i64),
+}
 pub fn learning_rate(epoch: i64) -> f64 {
     if epoch < 15 {
         0.1
@@ -252,4 +261,140 @@ pub fn test() -> Result<()> {
     }
     vs.save("models/fastnet1.model")?;
     Ok(())
+}
+
+///add conv_layer in channels out channels kernel_size \[--default |  stride padding\]
+/// 
+///add dropout dropout 
+/// 
+///add maxpool kernel_size 
+/// 
+///add flatten 
+/// 
+///add linear in_channels out_channels 
+/// 
+pub fn construct_model(vs: &nn::Path) -> SequentialT {
+    let mut stack: Vec<Layer> = Vec::new();
+    loop {
+        let mut user_input = String::new();
+        let stdin = std::io::stdin();
+        let _e = stdin.read_line(&mut user_input);
+        let input = &user_input.trim().split(" ").collect::<Vec<&str>>();
+        if input[0] == "add" {
+            assert!(
+                input.len() >= 2,
+                "{:?} - missing arguments",
+                input.join(" ")
+            );
+            if input[1] == "conv_layer" {
+                assert!(
+                    input.len() == 6 || input.len() == 7,
+                    "{:?} - missing arguments",
+                    input.join(" ")
+                );
+                let in_channels = i64::from_str_radix(input[2], 10).unwrap();
+                let out_channels = i64::from_str_radix(input[3], 10).unwrap();
+                let kernel_size = i64::from_str_radix(input[4], 10).unwrap();
+                let (stride, padding) = if input[5] == "--default" {
+                    (1, 0)
+                } else {
+                    (
+                        i64::from_str_radix(input[5], 10).unwrap(),
+                        i64::from_str_radix(input[6], 10).unwrap(),
+                    )
+                };
+                stack.push(Layer::ConvLayer(
+                    in_channels,
+                    out_channels,
+                    kernel_size,
+                    stride,
+                    padding,
+                    true,
+                ));
+            } else if input[1] == "maxpool" {
+                assert!(
+                    input.len() == 3,
+                    "{:?} - missing arguments",
+                    input.join(" ")
+                );
+                let kernel_size = i64::from_str_radix(input[2], 10).unwrap();
+                stack.push(Layer::Maxpool(kernel_size));
+            } else if input[1] == "dropout" {
+                assert!(
+                    input.len() == 3,
+                    "{:?} - missing arguments",
+                    input.join(" ")
+                );
+                let dropout = (input[2]).parse::<f64>().unwrap();
+                stack.push(Layer::Dropout(dropout));
+            } else if input[1] == "linear" {
+                assert!(
+                    input.len() == 4,
+                    "{:?} - missing arguments",
+                    input.join(" ")
+                );
+                let in_channels = (input[2]).parse::<i64>().unwrap();
+                let out_channels = (input[3]).parse::<i64>().unwrap();
+                stack.push(Layer::Linear(in_channels, out_channels));
+            } else if input[1] == "flatten" {
+                assert!(
+                    input.len() == 2,
+                    "{:?} - missing arguments",
+                    input.join(" ")
+                );
+                stack.push(Layer::Flatten());
+            } else {
+                panic!("unknown layer name");
+            }
+        } else if input[0] == "end" {
+            break;
+        }
+    }
+    let model = stack
+        .iter()
+        .fold(tch::nn::seq_t(), move |model, layer| match *layer {
+            Layer::ConvLayer(in_channels, out_channels, kernel_size, stride, padding, bias) => {
+                model.add(conv2d_sublayer(
+                    vs,
+                    in_channels,
+                    out_channels,
+                    kernel_size,
+                    Some(stride),
+                    Some(padding),
+                    bias,
+                ))
+            }
+            Layer::Maxpool(kernel) => model.add_fn(move |x| x.max_pool2d_default(kernel)),
+            Layer::Dropout(dropout) => model.add_fn_t(move |x, train| x.dropout(dropout, train)),
+            Layer::Flatten() => model.add_fn(|x| x.flat_view()),
+            Layer::Linear(in_channels, out_channels) => model.add(tch::nn::linear(
+                vs,
+                in_channels,
+                out_channels,
+                Default::default(),
+            )),
+        });
+    println!("{:#?}", model);
+    println!("{:#?}", stack);
+    model
+}
+pub fn train_model(vs: &nn::Path,model:&dyn ModuleT,optimizer :&mut Optimizer,data:&Dataset) ->() {
+    for epoch in 0..2 {
+        optimizer.set_lr(learning_rate(epoch));
+        for (_i, (bimages, blabels)) in data
+            .train_iter(64)
+            .shuffle()
+            .to_device(vs.device())
+            .enumerate()
+        {
+            let bimages = tch::vision::dataset::augmentation(&bimages, true, 4, 8);
+            let pred = model.forward_t(&bimages, true);
+            let loss = pred.cross_entropy_for_logits(&blabels);
+            optimizer.backward_step(&loss);
+        }
+        let test_accuracy =
+            model.batch_accuracy_for_logits(&data.test_images, &data.test_labels, vs.device(), 512);
+        println!("epoch: {:4} test acc: {:5.2}%", epoch+1, 100. * test_accuracy,);
+    };
+    
 }
