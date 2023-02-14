@@ -1,8 +1,10 @@
 use nnetwork::*;
+#[derive(Debug)]
 enum Layer {
     ConvLayer(i64, i64, i64, i64, i64, bool),
     Maxpool(i64),
     Dropout(f64),
+    Flatten(),
     Linear(i64, i64),
 }
 pub fn main() -> () {
@@ -51,7 +53,7 @@ pub fn main() -> () {
                     padding,
                     true,
                 ));
-            }else if input[1] == "maxpool" {
+            } else if input[1] == "maxpool" {
                 assert!(
                     input.len() == 3,
                     "{:?} - missing arguments",
@@ -75,7 +77,14 @@ pub fn main() -> () {
                 );
                 let in_channels = (input[2]).parse::<i64>().unwrap();
                 let out_channels = (input[3]).parse::<i64>().unwrap();
-                stack.push(Layer::Linear(in_channels,out_channels));
+                stack.push(Layer::Linear(in_channels, out_channels));
+            } else if input[1] == "flatten" {
+                assert!(
+                    input.len() == 2,
+                    "{:?} - missing arguments",
+                    input.join(" ")
+                );
+                stack.push(Layer::Flatten());
             } else {
                 panic!("unknown layer name");
             }
@@ -83,32 +92,6 @@ pub fn main() -> () {
             break;
         }
     }
-    // while input[0] == "add" {
-    //     if input[1] == "conv_layer" {
-    //         assert!(input.len() == 6 || input.len() == 7);
-    //         let in_channels = i64::from_str_radix(input[2], 10).unwrap();
-    //         let out_channels = i64::from_str_radix(input[3], 10).unwrap();
-    //         let kernel_size = i64::from_str_radix(input[4], 10).unwrap();
-    //         let (stride, padding) = if input[5] == "--default" {
-    //             (Some(1), Some(0))
-    //         } else {
-    //             (
-    //                 Some(i64::from_str_radix(input[5], 10).unwrap()),
-    //                 Some(i64::from_str_radix(input[6], 10).unwrap()),
-    //             )
-    //         };
-    //         stack.push((
-    //             in_channels,
-    //             out_channels,
-    //             kernel_size,
-    //             stride,
-    //             padding,
-    //             true,
-    //         ));
-    //     }
-    //     let _e = stdin.read_line(&mut user_input);
-    //     input = &user_input.trim().split(" ").collect::<Vec<&str>>();
-    // }
     let model = stack
         .iter()
         .fold(tch::nn::seq_t(), move |model, layer| match *layer {
@@ -125,6 +108,7 @@ pub fn main() -> () {
             }
             Layer::Maxpool(kernel) => model.add_fn(move |x| x.max_pool2d_default(kernel)),
             Layer::Dropout(dropout) => model.add_fn_t(move |x, train| x.dropout(dropout, train)),
+            Layer::Flatten() => model.add_fn(|x| x.flat_view()),
             Layer::Linear(in_channels, out_channels) => model.add(tch::nn::linear(
                 &vs.root(),
                 in_channels,
@@ -133,11 +117,10 @@ pub fn main() -> () {
             )),
         });
     println!("{:?}", model);
+    println!("{:?}",stack);
     //add conv_layer [in channels] [out channels] [kernel_size] [--default |  [stride] [padding]]
-    // let model_arch = user_input.as_str().trim().split(" ").collect::<Vec<&str>>();
-    // println!("{:?}", model_arch);
-    // for layer in model_arch {
-    //     println!("{:?}",layer);
-
-    // }
+    //add dropout dropout
+    //add maxpool kernel_size
+    //add flatten
+    //add linear in_channels out_channels
 }
