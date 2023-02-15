@@ -292,7 +292,6 @@ impl Model {
 ///add linear in_channels out_channels
 ///
 pub fn construct_model(vs: &nn::Path) -> SequentialT {
-    let mut stack: Vec<Layer> = Vec::new();
     let mut model = Model::new();
     loop {
         let mut user_input = String::new();
@@ -308,11 +307,6 @@ pub fn construct_model(vs: &nn::Path) -> SequentialT {
                 input.join(" ")
             );
             if input[1] == "conv_layer" {
-                // assert!(
-                //     input.len() == 6 || input.len() == 7,
-                //     "{:?} - missing arguments",
-                //     input.join(" ")
-                // );
                 if input.len() < 6 || input.len() > 7 {
                     println!("Incorrect number of arguments!\n Correct use is: \"add conv_layer in_channels out_channels kernel_size [--default | stride padding]\"");
                     continue;
@@ -328,14 +322,6 @@ pub fn construct_model(vs: &nn::Path) -> SequentialT {
                         i64::from_str_radix(input[6], 10).unwrap(),
                     )
                 };
-                // stack.push(Layer::ConvLayer(
-                //     in_channels,
-                //     out_channels,
-                //     kernel_size,
-                //     stride,
-                //     padding,
-                //     true,
-                // ));
                 match model.output {
                     Output::Conv(None, h, w) => {
                         //first conv layer
@@ -366,50 +352,16 @@ pub fn construct_model(vs: &nn::Path) -> SequentialT {
                             continue;
                         }
                     }
-                    Output::Linear(out_features) => {
+                    Output::Linear(_out_features) => {
                         println!("Cannot put a conv layer after a linear layer!");
                     }
                 };
-                // if let Some(out_dim) = model.out_channels {
-                //     if out_dim == in_channels {
-                //         // new layer input dim matches last layer output dim
-                //         model.stack.push(Layer::ConvLayer(
-                //             in_channels,
-                //             out_channels,
-                //             kernel_size,
-                //             stride,
-                //             padding,
-                //             true,
-                //         ));
-                //         model.out_channels = Some(out_channels);
-                //     } else {
-                //         println!("Input dim does not match last layer's output dim!\n input : {}, output : {}",in_channels,out_dim);
-                //         continue;
-                //     }
-                // } else {
-                //     // model.last_dim = None -> first channel
-                //     model.stack.push(Layer::ConvLayer(
-                //         in_channels,
-                //         out_channels,
-                //         kernel_size,
-                //         stride,
-                //         padding,
-                //         true,
-                //     ));
-                //     model.out_channels = Some(out_channels);
-                // }
             } else if input[1] == "maxpool" {
                 if input.len() != 3 {
                     println!("Incorrect number of arguments!\n Correct use is: \"add maxpool kernel_size\"");
                     continue;
                 }
                 let kernel_size = i64::from_str_radix(input[2], 10).unwrap();
-                // stack.push(Layer::Maxpool(kernel_size));
-                // match model.output{
-                //     Output::Conv(None, h, w) => {},
-                //     Output::Conv(Some(out_dim), h, w) => {},
-                //     Output::Linear(out_features) => {},
-                // };
                 match model.output {
                     Output::Conv(None, h, w) => {
                         //first layer
@@ -430,30 +382,23 @@ pub fn construct_model(vs: &nn::Path) -> SequentialT {
                         model.output =
                             Output::Conv(Some(out_dim), h / kernel_size, w / kernel_size);
                     }
-                    Output::Linear(out_features) => {
+                    Output::Linear(_out_features) => {
                         println!("Cannot add maxpool layer after a linear layer!");
                         continue;
                     }
                 };
             } else if input[1] == "dropout" {
-                // assert!(
-                //     input.len() == 3,
-                //     "{:?} - missing arguments",
-                //     input.join(" ")
-                // );
                 if input.len() != 3 {
                     println!("Incorrect number of arguments!\n Correct use is: \"add dropout p\"");
                     continue;
                 }
                 let dropout = (input[2]).parse::<f64>().unwrap();
-                // stack.push(Layer::Dropout(dropout));
+                if dropout <=0. || dropout >=1. {
+                    println!("Dropout probability should be between 0 and 1.");
+                    continue;
+                }
                 model.stack.push(Layer::Dropout(dropout));
             } else if input[1] == "linear" {
-                // assert!(
-                //     input.len() == 4,
-                //     "{:?} - missing arguments",
-                //     input.join(" ")
-                // );
                 if input.len() != 4 {
                     println!("Incorrect number of arguments!\n Correct use is: \"add linear in_features out_features\"");
                     continue;
@@ -475,29 +420,9 @@ pub fn construct_model(vs: &nn::Path) -> SequentialT {
                         };
                     }
                 };
-                // stack.push(Layer::Linear(in_channels, out_channels));
-                // if let Some(out_dim) = model.out_channels {
-                //     if hid_size == in_features {
-                //         // new layer input dim matches last layer output dim
-                //         model.stack.push(Layer::Linear(in_channels, out_channels));
-                //         model.last_dim = Some(out_channels);
-                //     } else {
-                //         println!("Input dim does not match last layer's output dim!\n input : {}, output : {}",in_channels,out_dim);
-                //         continue;
-                //     }
-                // } else {
-                //     // model.last_dim = None -> first channel
-                //     println!("Cannot put Linear layer as first layer!");
-                //     continue;
-                // }
             } else if input[1] == "flatten" {
-                // assert!(
-                //     input.len() == 2,
-                //     "{:?} - missing arguments",
-                //     input.join(" ")
-                // );
                 if input.len() != 2 {
-                    println!("Incorrect number of arguments!\n Correct use is: \"add flatten\"");
+                    println!("Flatten does not take arguments!\n Correct use is: \"add flatten\"");
                     continue;
                 }
                 match model.output {
@@ -515,7 +440,6 @@ pub fn construct_model(vs: &nn::Path) -> SequentialT {
                         continue;
                     },
                 };
-                // stack.push(Layer::Flatten());
             } else {
                 println!("Unknown layer name!");
                 continue;
@@ -524,7 +448,7 @@ pub fn construct_model(vs: &nn::Path) -> SequentialT {
             println!("Unknown command \"{}\"! Valid commands are:\n add layer_name [layer_options]\n build",input[0])
         }
     }
-    let model = model.stack
+    let net = model.stack
         .iter()
         .fold(tch::nn::seq_t(), move |model, layer| match *layer {
             Layer::ConvLayer(in_channels, out_channels, kernel_size, stride, padding, bias) => {
@@ -548,9 +472,9 @@ pub fn construct_model(vs: &nn::Path) -> SequentialT {
                 Default::default(),
             )),
         });
-    println!("{:#?}", model);
-    println!("{:#?}", stack);
-    model
+    println!("{:#?}", net);
+    println!("{:#?}", model.stack);
+    net
 }
 
 pub fn train_model(
