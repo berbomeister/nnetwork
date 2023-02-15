@@ -1,3 +1,5 @@
+use std::{fs::File, io::{IoSlice, Write, Read, BufRead}};
+
 use nnetwork::*;
 use tch::nn::OptimizerConfig;
 use anyhow::{Ok, Result};
@@ -12,7 +14,7 @@ use anyhow::{Ok, Result};
 pub fn main() -> Result<()> {
     // let _r = test();
 
-    cli()?;
+    // cli()?;
 
     // let str = "models/fastnet1.model";
     // let t = str.to_string().split(".").collect::<Vec<&str>>()[0].to_string();
@@ -32,9 +34,31 @@ pub fn main() -> Result<()> {
     //     //read arguments and do action
     // }
     
-    // let mut vs = tch::nn::VarStore::new(tch::Device::cuda_if_available());
+    let mut vs = tch::nn::VarStore::new(tch::Device::cuda_if_available());
 
-    // let model = construct_model(&vs.root());
+    let (model,stack) = construct_model(&vs.root());
+    let modelname = "architectures/test1";
+    
+    //save model
+    let mut file = File::create(modelname).expect("Unable to create file for model architecture.");
+    println!("{:#?}",stack);
+    let ser = serde_json::to_string(&stack)?;
+    println!("{}",ser.as_str());
+    file.write(ser.as_bytes())?;
+
+    //load model
+    let mut buf =String::new();
+    File::open(modelname)?.read_to_string(&mut buf)?;
+    println!("{}",buf);
+    let deser :Vec<Layer> = serde_json::from_str(buf.as_str())?;
+    println!("{:#?}",deser);
+
+    
+    // for layer in stack{
+    //     let serialized = serde_json::to_string(&layer)?;
+    //     file.write(serialized.as_bytes())?;
+    //     file.write(b"\n")?;
+    // }
     // let model = fast_resnet(&vs.root());
     // load_model(&mut vs, "models/fastnet1.model")?;
 
@@ -51,3 +75,13 @@ pub fn main() -> Result<()> {
     // let _res = predict(&model, "test/truck.jfif",&vs.device())?;
     Ok(())
 }
+// add conv_layer 3 64 3 --default
+// add conv_layer 64 256 3 --default
+// add maxpool 4
+// add dropout 0.3
+// add conv_layer 256 512 3 --default
+// add maxpool 4
+// add dropout 0.2
+// add flatten
+// add linear -1 10
+// build

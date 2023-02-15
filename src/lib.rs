@@ -4,6 +4,7 @@ use std::{fs, vec};
 use tch::nn::{ModuleT, Optimizer, OptimizerConfig, SequentialT};
 use tch::vision::dataset::Dataset;
 use tch::{nn, Device};
+use serde::{Serialize, Deserialize};
 
 pub fn learning_rate(epoch: i64) -> f64 {
     if epoch < 15 {
@@ -253,8 +254,9 @@ pub fn test() -> Result<()> {
     vs.save("models/fastnet1.model")?;
     Ok(())
 }
-#[derive(Debug)]
-enum Layer {
+
+#[derive(Debug,Serialize,Deserialize)]
+pub enum Layer {
     ConvLayer(i64, i64, i64, Option<i64>, Option<i64>, bool),
     Maxpool(i64),
     Dropout(f64),
@@ -303,7 +305,7 @@ impl Model {
 /// - ### build
 ///     -> builds and returns the model
 ///
-pub fn construct_model(vs: &nn::Path) -> SequentialT {
+pub fn construct_model(vs: &nn::Path) -> (SequentialT,Vec<Layer>) {
     let mut model = Model::new();
     loop {
         let mut user_input = String::new();
@@ -489,8 +491,8 @@ pub fn construct_model(vs: &nn::Path) -> SequentialT {
             )),
         });
     // println!("{:#?}", net);
-    println!("{:#?}", model.stack);
-    net
+    // println!("{:#?}", model.stack);
+    (net,model.stack)
 }
 
 pub fn train_model(
@@ -647,7 +649,8 @@ pub fn cli() -> Result<()> {
                 if input.len() != 1 {
                     println!("This command does not take any arguments, they will be ignored!");
                 }
-                net = construct_model(&vs.root());
+                let _t;
+                (net,_t) = construct_model(&vs.root());
                 loaded_model = true;
             }
             "train" => {
