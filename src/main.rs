@@ -1,19 +1,28 @@
 use nnetwork::*;
 use tch::nn::OptimizerConfig;
-use tch::nn::ModuleT;
+use anyhow::{Ok, Result};
 //construct model X
 //train model X
 //save model 
 //load model
 //model accuracy
-pub fn main() -> () {
+//test model
+//CLI
+pub fn main() -> Result<()> {
     // let _r = test();
 
-    let vs = tch::nn::VarStore::new(tch::Device::cuda_if_available());
-
+    let mut vs = tch::nn::VarStore::new(tch::Device::cuda_if_available());
     // let model = construct_model(&vs.root());
-    let data = tch::vision::cifar::load_dir("data").unwrap();
+    // let data = tch::vision::cifar::load_dir("data")?;
+    
+    load_model(&mut vs, "models/fastnet1.model")?;
     let model = fast_resnet(&vs.root());
-    let mut optimizer = tch::nn::Adam::default().build(&vs, 0.).unwrap();
-    train_model(&vs.root(), &model, &mut optimizer, &data);
+    // let mut optimizer = tch::nn::Adam::default().build(&vs, 0.)?;
+    // train_model(&vs.root(), &model, &mut optimizer, &data,2);
+    // println!("{:#?}",model);
+    // println!("{:?}",accuracy_model(&model, &data, &vs.device()));
+    let _res = predict(&model, "test/golden-retriever-dog.jpg",&vs.device())?;
+    let _res = predict(&model, "test/big_jazz.jpg",&vs.device())?;
+    let _res = predict(&model, "test/small_jazz.png",&vs.device())?;
+    Ok(())
 }

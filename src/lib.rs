@@ -1,5 +1,5 @@
 use anyhow::{Ok, Result};
-use tch::nn::{ModuleT, OptimizerConfig, SequentialT, Optimizer};
+use tch::nn::{ModuleT, Optimizer, OptimizerConfig, SequentialT};
 use tch::vision::dataset::Dataset;
 use tch::{nn, Device};
 
@@ -263,16 +263,17 @@ pub fn test() -> Result<()> {
     Ok(())
 }
 
-///add conv_layer in channels out channels kernel_size \[--default |  stride padding\]
-/// 
-///add dropout dropout 
-/// 
-///add maxpool kernel_size 
-/// 
-///add flatten 
-/// 
-///add linear in_channels out_channels 
-/// 
+/// # Uses:   
+/// add conv_layer in channels out channels kernel_size \[--default |  stride padding\]
+///
+///add dropout dropout
+///
+///add maxpool kernel_size
+///
+///add flatten
+///
+///add linear in_channels out_channels
+///
 pub fn construct_model(vs: &nn::Path) -> SequentialT {
     let mut stack: Vec<Layer> = Vec::new();
     loop {
@@ -378,8 +379,14 @@ pub fn construct_model(vs: &nn::Path) -> SequentialT {
     println!("{:#?}", stack);
     model
 }
-pub fn train_model(vs: &nn::Path,model:&dyn ModuleT,optimizer :&mut Optimizer,data:&Dataset) ->() {
-    for epoch in 0..2 {
+pub fn train_model(
+    vs: &nn::Path,
+    model: &dyn ModuleT,
+    optimizer: &mut Optimizer,
+    data: &Dataset,
+    epochs: i64,
+) -> () {
+    for epoch in 0..epochs {
         optimizer.set_lr(learning_rate(epoch));
         for (_i, (bimages, blabels)) in data
             .train_iter(64)
@@ -394,7 +401,55 @@ pub fn train_model(vs: &nn::Path,model:&dyn ModuleT,optimizer :&mut Optimizer,da
         }
         let test_accuracy =
             model.batch_accuracy_for_logits(&data.test_images, &data.test_labels, vs.device(), 512);
-        println!("epoch: {:4} test acc: {:5.2}%", epoch+1, 100. * test_accuracy,);
-    };
-    
+        println!(
+            "epoch: {:4} test acc: {:5.2}%",
+            epoch + 1,
+            100. * test_accuracy,
+        );
+    }
+}
+pub fn save_model(vs: &nn::VarStore, filename: &str) -> Result<()> {
+    vs.save(filename)?;
+    Ok(())
+}
+pub fn load_model(vs: &mut nn::VarStore, filename: &str) -> Result<()> {
+    vs.load(filename)?;
+    Ok(())
+}
+
+pub fn accuracy_model(model: &dyn ModuleT, data: &Dataset, device: &Device) -> f64 {
+    let _no_grad = tch::no_grad_guard();
+    let mut sum_accuracy = 0f64;
+    let mut sample_count = 0f64;
+    let batch_size = 64;
+    for (xs, ys) in data
+        .test_iter(batch_size)
+        .to_device(*device)
+        .return_smaller_last_batch()
+    {
+        let acc = model.forward_t(&xs, false).accuracy_for_logits(&ys);
+        let size = xs.size()[0] as f64;
+        sum_accuracy += f64::from(&acc) * size;
+        sample_count += size;
+    }
+    sum_accuracy / sample_count
+}
+pub fn predict(model: &dyn ModuleT, imagepath: &str, device: &Device) -> Result<String> {
+    let image = tch::vision::image::load(imagepath)?;
+    let classes = vec![
+        "plane", "car", "bird", "cat", "deer", "dog", "frog", "horse", "ship", "truck",
+    ];
+    let image = tch::vision::image::resize(&image, 32, 32)?
+        .unsqueeze(0)
+        .to_kind(tch::Kind::Float)
+        .to_device(*device);
+    tch::vision::image::save(&image, "test/res.png")?;
+    // println!("{:?}, {:?}",image.size(), image);
+    model.forward_t(&image, false).print();
+    let (_value, index) = model
+        .forward_t(&image, false)
+        .softmax(-1, tch::Kind::Float)
+        .topk(1, -1, true, true);
+    println!("prediction : {}", classes[index.int64_value(&[0]) as usize]);
+    Ok(String::from("value"))
 }
