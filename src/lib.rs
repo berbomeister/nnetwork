@@ -423,8 +423,10 @@ pub fn construct_model(vs: &nn::Path) -> SequentialT {
                         println!("Cannot put Linear layer as first layer, or directly after a conv layer!\n Consider adding a flatten layer first.");
                     }
                     Output::Linear(out_features_last) => {
-                        if in_features == out_features_last || in_features==-1 {
-                            model.stack.push(Layer::Linear(out_features_last, out_features));
+                        if in_features == out_features_last || in_features == -1 {
+                            model
+                                .stack
+                                .push(Layer::Linear(out_features_last, out_features));
                             model.output = Output::Linear(out_features);
                         } else {
                             println!("Input dim does not match last layer's output dim!\n input : {}, output : {}",in_features,out_features_last);
@@ -464,7 +466,7 @@ pub fn construct_model(vs: &nn::Path) -> SequentialT {
     let net = model
         .stack
         .iter()
-        .fold(tch::nn::seq_t().add_fn(|x| {println!("{:?}",x.size());x.max_pool2d_default(1)}), move |model, layer| match *layer {
+        .fold(tch::nn::seq_t(), move |model, layer| match *layer {
             Layer::ConvLayer(in_channels, out_channels, kernel_size, stride, padding, bias) => {
                 model.add(conv2d_sublayer(
                     vs,
@@ -478,7 +480,7 @@ pub fn construct_model(vs: &nn::Path) -> SequentialT {
             }
             Layer::Maxpool(kernel) => model.add_fn(move |x| x.max_pool2d_default(kernel)),
             Layer::Dropout(dropout) => model.add_fn_t(move |x, train| x.dropout(dropout, train)),
-            Layer::Flatten() => model.add_fn(|x| {println!("{:?}",x.size());x.flat_view()}),
+            Layer::Flatten() => model.add_fn(|x| x.flat_view()),
             Layer::Linear(in_channels, out_channels) => model.add(tch::nn::linear(
                 vs,
                 in_channels,
@@ -563,7 +565,7 @@ pub fn predict(model: &dyn ModuleT, imagepath: &str, device: &Device) -> Result<
         .to_kind(tch::Kind::Float)
         .to_device(*device)
         / 255;
-    
+
     println!("{}", &image);
     // println!(
     //     "{}",
@@ -632,7 +634,7 @@ pub fn cli() -> Result<()> {
                     println!("Wrong syntax. Type help save for more information.");
                     continue;
                 }
-                if !loaded_model{
+                if !loaded_model {
                     println!("No loaded model, ignoring this command!");
                     continue;
                 }
@@ -685,13 +687,13 @@ pub fn cli() -> Result<()> {
                     println!("Wrong syntax. Type help train for more information.");
                     continue;
                 }
-                if !loaded_model{
+                if !loaded_model {
                     println!("No loaded model, ignoring this command!");
                     continue;
                 }
                 let imagepath = input[1];
                 let prediction = predict(&net, imagepath, &vs.device())?;
-                println!("The model predicted: {}",prediction.as_str());
+                println!("The model predicted: {}", prediction.as_str());
             }
             "exit" => {
                 break;
