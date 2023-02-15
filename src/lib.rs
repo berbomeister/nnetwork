@@ -1,4 +1,6 @@
 use anyhow::{Ok, Result};
+use std::io::Write;
+use std::{fs, vec};
 use tch::nn::{ModuleT, Optimizer, OptimizerConfig, SequentialT};
 use tch::vision::dataset::Dataset;
 use tch::{nn, Device};
@@ -175,8 +177,6 @@ pub fn fast_resnet(vs: &nn::Path) -> SequentialT {
             Some(1),
             true,
         ))
-        // .add(layer(&vs.sub("layer1"), 64, 128))
-        // .add(conv_bn(&vs.sub("inter"), 128, 256))
         .add(conv2d_sublayer(
             &vs.sub("inter"),
             64,
@@ -198,7 +198,6 @@ pub fn fast_resnet(vs: &nn::Path) -> SequentialT {
             true,
         ))
         .add_fn(|x| x.max_pool2d_default(2))
-        // .add(layer(&vs.sub("layer2"), 256, 512))
         .add_fn(|x| x.max_pool2d_default(4).flat_view())
         .add(nn::linear(vs.sub("linear"), 512, 10, Default::default()))
         .add_fn(|x| x * 0.125)
@@ -280,16 +279,29 @@ impl Model {
         }
     }
 }
-/// # Uses:   
-/// add conv_layer in channels out channels kernel_size \[--default |  stride padding\]
+/// ## Constructs a model from command-line commands. Valid commands are:   
+/// - ### add conv_layer in channels out channels kernel_size \[--default |  stride padding\]
 ///
-///add dropout p
+///     -> adds a convolution layer to the architecture with the specified params; default value for (stride, padding) is (1,0)
 ///
-///add maxpool kernel_size
+/// - ### add dropout p
 ///
-///add flatten
+///     -> adds a dropout layer with p probabilty
 ///
-///add linear in_channels out_channels
+/// - ### add maxpool kernel_size
+///
+///     -> adds a maxpool layer to the architecture with kernel size and no stride/padding
+///
+/// - ### add flatten
+///
+///     -> adds a flatten layer to the architecture
+///
+/// - ### add linear in_features out_features
+///
+///     -> adds a linear layer to the architecture with input_features and output_features
+///
+/// - ### build
+///     -> builds and returns the model
 ///
 pub fn construct_model(vs: &nn::Path) -> SequentialT {
     let mut model = Model::new();
@@ -393,7 +405,7 @@ pub fn construct_model(vs: &nn::Path) -> SequentialT {
                     continue;
                 }
                 let dropout = (input[2]).parse::<f64>().unwrap();
-                if dropout <=0. || dropout >=1. {
+                if dropout <= 0. || dropout >= 1. {
                     println!("Dropout probability should be between 0 and 1.");
                     continue;
                 }
@@ -411,8 +423,8 @@ pub fn construct_model(vs: &nn::Path) -> SequentialT {
                         println!("Cannot put Linear layer as first layer, or directly after a conv layer!\n Consider adding a flatten layer first.");
                     }
                     Output::Linear(out_features_last) => {
-                        if in_features == out_features_last {
-                            model.stack.push(Layer::Linear(in_features, out_features));
+                        if in_features == out_features_last || in_features==-1 {
+                            model.stack.push(Layer::Linear(out_features_last, out_features));
                             model.output = Output::Linear(out_features);
                         } else {
                             println!("Input dim does not match last layer's output dim!\n input : {}, output : {}",in_features,out_features_last);
@@ -429,16 +441,16 @@ pub fn construct_model(vs: &nn::Path) -> SequentialT {
                     Output::Conv(None, h, w) => {
                         //first layer
                         model.stack.push(Layer::Flatten());
-                        model.output = Output::Linear(3*h*w);
-                    },
+                        model.output = Output::Linear(3 * h * w);
+                    }
                     Output::Conv(Some(out_dim), h, w) => {
                         model.stack.push(Layer::Flatten());
-                        model.output = Output::Linear(out_dim*h*w);
-                    },
+                        model.output = Output::Linear(out_dim * h * w);
+                    }
                     Output::Linear(_out_features) => {
                         println!("No point in adding a flatten after a linear layer. This command is skipped.");
                         continue;
-                    },
+                    }
                 };
             } else {
                 println!("Unknown layer name!");
@@ -448,7 +460,8 @@ pub fn construct_model(vs: &nn::Path) -> SequentialT {
             println!("Unknown command \"{}\"! Valid commands are:\n add layer_name [layer_options]\n build",input[0])
         }
     }
-    let net = model.stack
+    let net = model
+        .stack
         .iter()
         .fold(tch::nn::seq_t(), move |model, layer| match *layer {
             Layer::ConvLayer(in_channels, out_channels, kernel_size, stride, padding, bias) => {
@@ -472,7 +485,7 @@ pub fn construct_model(vs: &nn::Path) -> SequentialT {
                 Default::default(),
             )),
         });
-    println!("{:#?}", net);
+    // println!("{:#?}", net);
     println!("{:#?}", model.stack);
     net
 }
@@ -483,7 +496,7 @@ pub fn train_model(
     optimizer: &mut Optimizer,
     data: &Dataset,
     epochs: i64,
-) -> () {
+) {
     for epoch in 0..epochs {
         optimizer.set_lr(learning_rate(epoch));
         for (_i, (bimages, blabels)) in data
@@ -506,6 +519,7 @@ pub fn train_model(
         );
     }
 }
+
 pub fn save_model(vs: &nn::VarStore, filename: &str) -> Result<()> {
     vs.save(filename)?;
     Ok(())
@@ -514,7 +528,12 @@ pub fn load_model(vs: &mut nn::VarStore, filename: &str) -> Result<()> {
     vs.load(filename)?;
     Ok(())
 }
-
+pub fn load_net(net: &SequentialT, modelname: &str) -> Result<()> {
+    todo!()
+}
+pub fn save_net(net: &SequentialT, modelname: &str) -> Result<()> {
+    todo!()
+}
 pub fn accuracy_model(model: &dyn ModuleT, data: &Dataset, device: &Device) -> f64 {
     let _no_grad = tch::no_grad_guard();
     let mut sum_accuracy = 0f64;
@@ -543,7 +562,8 @@ pub fn predict(model: &dyn ModuleT, imagepath: &str, device: &Device) -> Result<
         .to_kind(tch::Kind::Float)
         .to_device(*device)
         / 255;
-    // println!("{}", &image);
+    
+    println!("{}", &image);
     // println!(
     //     "{}",
     //     model.forward_t(&image, false).softmax(-1, tch::Kind::Float)*100
@@ -553,5 +573,138 @@ pub fn predict(model: &dyn ModuleT, imagepath: &str, device: &Device) -> Result<
         .softmax(-1, tch::Kind::Float)
         .topk(1, -1, true, true);
     println!("prediction : {}", classes[index.int64_value(&[0]) as usize]);
-    Ok(String::from("value"))
+    Ok(String::from(classes[index.int64_value(&[0]) as usize]))
+}
+
+pub fn cli() -> Result<()> {
+    let welcome = fs::read_to_string("txt/welcome")?;
+    println!("{welcome}");
+    let valid_commands = vec![
+        "help",
+        "load",
+        "save",
+        "construct",
+        "train",
+        "accuracy",
+        "predict",
+    ];
+    let data = tch::vision::cifar::load_dir("data")?;
+    let mut vs = tch::nn::VarStore::new(tch::Device::cuda_if_available());
+    let mut loaded_model = false;
+    let mut net = nn::seq_t();
+    loop {
+        let mut user_input = String::new();
+        print!(">>");
+        std::io::stdout().flush()?;
+        let stdin = std::io::stdin();
+        let _e = stdin.read_line(&mut user_input);
+        let input = &user_input.trim().split(" ").collect::<Vec<&str>>();
+        // println!("-{:#?}-", input);
+        match input[0] {
+            "help" => {
+                if input.len() == 1 {
+                    let help = fs::read_to_string("txt/help/all")?;
+                    println!("{help}");
+                } else {
+                    if valid_commands.contains(&input[1]) {
+                        let help = fs::read_to_string(format!("txt/help/{}", input[1]))?;
+                        println!("{help}");
+                    } else {
+                        println!("Invalid command name. Type help for more information");
+                        continue;
+                    }
+                };
+            }
+            "load" => {
+                if input.len() != 2 {
+                    println!("Wrong syntax. Type help load for more information");
+                    continue;
+                }
+                let pathname = input[1];
+                let modelname = modelname(pathname);
+                load_net(&net, modelname.as_str())?;
+                load_model(&mut vs, pathname)?;
+                loaded_model = true;
+            }
+            "save" => {
+                if input.len() != 2 {
+                    println!("Wrong syntax. Type help save for more information.");
+                    continue;
+                }
+                if !loaded_model{
+                    println!("No loaded model, ignoring this command!");
+                    continue;
+                }
+                let pathname = input[1];
+                let modelname = modelname(pathname);
+                save_model(&vs, pathname)?;
+                save_net(&net, modelname.as_str())?;
+            }
+            "construct" => {
+                if input.len() != 1 {
+                    println!("This command does not take any arguments, they will be ignored!");
+                }
+                net = construct_model(&vs.root());
+                loaded_model = true;
+            }
+            "train" => {
+                if input.len() != 3 {
+                    println!("Wrong syntax. Type help train for more information.");
+                    continue;
+                };
+                if !loaded_model {
+                    println!("No loaded model, ignoring this command!");
+                    continue;
+                };
+                let optim = input[1];
+                let epochs = input[2].parse::<i64>()?;
+                let mut optim = match optim {
+                    "adam" => nn::Adam::default().build(&vs, 0.)?,
+                    "sgd" => nn::Sgd::default().build(&vs, 0.)?,
+                    _ => nn::Adam::default().build(&vs, 0.)?,
+                };
+                train_model(&vs.root(), &net, &mut optim, &data, epochs);
+                println!("Finished Training! Maybe test accuracy now?");
+            }
+            "accuracy" => {
+                if input.len() != 1 {
+                    println!("This command does not take any arguments, they will be ignored!");
+                };
+                if !loaded_model {
+                    println!("No loaded model, ignoring this command!");
+                    continue;
+                };
+                println!(
+                    "The accuracy of the current model is {}",
+                    accuracy_model(&net, &data, &vs.device())
+                );
+            }
+            "predict" => {
+                if input.len() != 2 {
+                    println!("Wrong syntax. Type help train for more information.");
+                    continue;
+                }
+                if !loaded_model{
+                    println!("No loaded model, ignoring this command!");
+                    continue;
+                }
+                let imagepath = input[1];
+                let prediction = predict(&net, imagepath, &vs.device())?;
+                println!("The model predicted: {}",prediction.as_str());
+            }
+            "exit" => {
+                break;
+            }
+            _ => {
+                println!("Invalid command, for help type \"help\"");
+            }
+        }
+    }
+    Ok(())
+}
+
+pub fn modelname(pathname: &str) -> String {
+    let _t = pathname.to_string().split(".").collect::<Vec<&str>>()[0].to_string();
+    let name = _t.split('/').collect::<Vec<&str>>()[1].clone();
+    String::from(name)
 }

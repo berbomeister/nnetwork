@@ -1,0 +1,14 @@
+Welcome! This program can build, train or test CNN models on the CIFAR-10 dataset.
+To start type one of the commands below:
+help -> further information about each command
+load pathname -> load the model at pathname.*
+save pathname -> save the current model to pathname.
+construct -> prompt you to construct a new model.
+ Further information can be found with help construct.*
+train optimizer epochs-> train the current* model using optimizer for epochs.
+ Further information can be found with help train.
+accuracy -> test accuracy of current* model.
+predict filepath -> predict the label of picture at filepath, using current* model.
+ Further information can be found with help predict.
+exit -> exits the program
+Note: There can be only one model loaded at a time.

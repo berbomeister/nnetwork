@@ -1,6 +1,7 @@
 use nnetwork::*;
 use tch::nn::OptimizerConfig;
 use anyhow::{Ok, Result};
+
 //construct model X
 //train model X
 //save model X
@@ -11,9 +12,29 @@ use anyhow::{Ok, Result};
 pub fn main() -> Result<()> {
     // let _r = test();
 
-    let mut vs = tch::nn::VarStore::new(tch::Device::cuda_if_available());
+    cli()?;
 
-    let model = construct_model(&vs.root());
+    // let str = "models/fastnet1.model";
+    // let t = str.to_string().split(".").collect::<Vec<&str>>()[0].to_string();
+    // let name = t.split('/').collect::<Vec<&str>>()[1];
+    // println!("{:?}",name);
+    // println!("{:?}",modelname(str));
+    // println!("{}","123".parse::<i64>()?);
+    // let welcome = std::fs::read_to_string("txt/welcome")?;
+    // println!("{welcome}");
+    // let args: Vec<String> = std::env::args().collect();
+    // println!("{:#?}",args);
+    // if args.len() == 1 {
+    //     // println!("asdasdasd");
+    //     cli()?;
+    // }
+    // else {
+    //     //read arguments and do action
+    // }
+    
+    // let mut vs = tch::nn::VarStore::new(tch::Device::cuda_if_available());
+
+    // let model = construct_model(&vs.root());
     // let model = fast_resnet(&vs.root());
     // load_model(&mut vs, "models/fastnet1.model")?;
 

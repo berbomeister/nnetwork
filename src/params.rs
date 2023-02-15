@@ -1,7 +1,7 @@
 #![allow(dead_code)]
 const LABELS: i64 = 10; // number of distinct labels
-const HEIGHT: usize = 28; 
-const WIDTH: usize = 28;
+const HEIGHT: usize = 32; 
+const WIDTH: usize = 32;
 const IMAGE_DIM: i64 = 784;
 const HIDDEN_NODES: i64 = 128;
 
