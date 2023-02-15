@@ -435,6 +435,7 @@ pub fn accuracy_model(model: &dyn ModuleT, data: &Dataset, device: &Device) -> f
     sum_accuracy / sample_count
 }
 pub fn predict(model: &dyn ModuleT, imagepath: &str, device: &Device) -> Result<String> {
+    let _no_grad = tch::no_grad_guard();
     let image = tch::vision::image::load(imagepath)?;
     let classes = vec![
         "plane", "car", "bird", "cat", "deer", "dog", "frog", "horse", "ship", "truck",
@@ -442,10 +443,13 @@ pub fn predict(model: &dyn ModuleT, imagepath: &str, device: &Device) -> Result<
     let image = tch::vision::image::resize(&image, 32, 32)?
         .unsqueeze(0)
         .to_kind(tch::Kind::Float)
-        .to_device(*device);
-    tch::vision::image::save(&image, "test/res.png")?;
-    // println!("{:?}, {:?}",image.size(), image);
-    model.forward_t(&image, false).print();
+        .to_device(*device)
+        / 255;
+    // println!("{}", &image);
+    // println!(
+    //     "{}",
+    //     model.forward_t(&image, false).softmax(-1, tch::Kind::Float)*100
+    // );
     let (_value, index) = model
         .forward_t(&image, false)
         .softmax(-1, tch::Kind::Float)
