@@ -3,14 +3,6 @@ use tch::nn::{ModuleT, Optimizer, OptimizerConfig, SequentialT};
 use tch::vision::dataset::Dataset;
 use tch::{nn, Device};
 
-#[derive(Debug)]
-enum Layer {
-    ConvLayer(i64, i64, i64, i64, i64, bool),
-    Maxpool(i64),
-    Dropout(f64),
-    Flatten(),
-    Linear(i64, i64),
-}
 pub fn learning_rate(epoch: i64) -> f64 {
     if epoch < 15 {
         0.1
@@ -262,11 +254,36 @@ pub fn test() -> Result<()> {
     vs.save("models/fastnet1.model")?;
     Ok(())
 }
-
+#[derive(Debug)]
+enum Layer {
+    ConvLayer(i64, i64, i64, i64, i64, bool),
+    Maxpool(i64),
+    Dropout(f64),
+    Flatten(),
+    Linear(i64, i64),
+}
+#[derive(Debug)]
+enum Output {
+    Conv(Option<i64>, i64, i64),
+    Linear(i64),
+}
+#[derive(Debug)]
+struct Model {
+    stack: Vec<Layer>,
+    output: Output,
+}
+impl Model {
+    fn new() -> Model {
+        Model {
+            stack: Vec::new(),
+            output: Output::Conv(None, 32, 32),
+        }
+    }
+}
 /// # Uses:   
 /// add conv_layer in channels out channels kernel_size \[--default |  stride padding\]
 ///
-///add dropout dropout
+///add dropout p
 ///
 ///add maxpool kernel_size
 ///
@@ -276,23 +293,30 @@ pub fn test() -> Result<()> {
 ///
 pub fn construct_model(vs: &nn::Path) -> SequentialT {
     let mut stack: Vec<Layer> = Vec::new();
+    let mut model = Model::new();
     loop {
         let mut user_input = String::new();
         let stdin = std::io::stdin();
         let _e = stdin.read_line(&mut user_input);
         let input = &user_input.trim().split(" ").collect::<Vec<&str>>();
-        if input[0] == "add" {
+        if input[0] == "build" {
+            break;
+        } else if input[0] == "add" {
             assert!(
                 input.len() >= 2,
                 "{:?} - missing arguments",
                 input.join(" ")
             );
             if input[1] == "conv_layer" {
-                assert!(
-                    input.len() == 6 || input.len() == 7,
-                    "{:?} - missing arguments",
-                    input.join(" ")
-                );
+                // assert!(
+                //     input.len() == 6 || input.len() == 7,
+                //     "{:?} - missing arguments",
+                //     input.join(" ")
+                // );
+                if input.len() < 6 || input.len() > 7 {
+                    println!("Incorrect number of arguments!\n Correct use is: \"add conv_layer in_channels out_channels kernel_size [--default | stride padding]\"");
+                    continue;
+                }
                 let in_channels = i64::from_str_radix(input[2], 10).unwrap();
                 let out_channels = i64::from_str_radix(input[3], 10).unwrap();
                 let kernel_size = i64::from_str_radix(input[4], 10).unwrap();
@@ -304,54 +328,203 @@ pub fn construct_model(vs: &nn::Path) -> SequentialT {
                         i64::from_str_radix(input[6], 10).unwrap(),
                     )
                 };
-                stack.push(Layer::ConvLayer(
-                    in_channels,
-                    out_channels,
-                    kernel_size,
-                    stride,
-                    padding,
-                    true,
-                ));
+                // stack.push(Layer::ConvLayer(
+                //     in_channels,
+                //     out_channels,
+                //     kernel_size,
+                //     stride,
+                //     padding,
+                //     true,
+                // ));
+                match model.output {
+                    Output::Conv(None, h, w) => {
+                        //first conv layer
+                        model.stack.push(Layer::ConvLayer(
+                            in_channels,
+                            out_channels,
+                            kernel_size,
+                            stride,
+                            padding,
+                            true,
+                        ));
+                        model.output = Output::Conv(Some(out_channels), h, w);
+                    }
+                    Output::Conv(Some(out_dim), h, w) => {
+                        if out_dim == in_channels {
+                            // new layer input dim matches last layer output dim
+                            model.stack.push(Layer::ConvLayer(
+                                in_channels,
+                                out_channels,
+                                kernel_size,
+                                stride,
+                                padding,
+                                true,
+                            ));
+                            model.output = Output::Conv(Some(out_channels), h, w);
+                        } else {
+                            println!("Input dim does not match last layer's output dim!\n input : {}, output : {}",in_channels,out_dim);
+                            continue;
+                        }
+                    }
+                    Output::Linear(out_features) => {
+                        println!("Cannot put a conv layer after a linear layer!");
+                    }
+                };
+                // if let Some(out_dim) = model.out_channels {
+                //     if out_dim == in_channels {
+                //         // new layer input dim matches last layer output dim
+                //         model.stack.push(Layer::ConvLayer(
+                //             in_channels,
+                //             out_channels,
+                //             kernel_size,
+                //             stride,
+                //             padding,
+                //             true,
+                //         ));
+                //         model.out_channels = Some(out_channels);
+                //     } else {
+                //         println!("Input dim does not match last layer's output dim!\n input : {}, output : {}",in_channels,out_dim);
+                //         continue;
+                //     }
+                // } else {
+                //     // model.last_dim = None -> first channel
+                //     model.stack.push(Layer::ConvLayer(
+                //         in_channels,
+                //         out_channels,
+                //         kernel_size,
+                //         stride,
+                //         padding,
+                //         true,
+                //     ));
+                //     model.out_channels = Some(out_channels);
+                // }
             } else if input[1] == "maxpool" {
-                assert!(
-                    input.len() == 3,
-                    "{:?} - missing arguments",
-                    input.join(" ")
-                );
+                if input.len() != 3 {
+                    println!("Incorrect number of arguments!\n Correct use is: \"add maxpool kernel_size\"");
+                    continue;
+                }
                 let kernel_size = i64::from_str_radix(input[2], 10).unwrap();
-                stack.push(Layer::Maxpool(kernel_size));
+                // stack.push(Layer::Maxpool(kernel_size));
+                // match model.output{
+                //     Output::Conv(None, h, w) => {},
+                //     Output::Conv(Some(out_dim), h, w) => {},
+                //     Output::Linear(out_features) => {},
+                // };
+                match model.output {
+                    Output::Conv(None, h, w) => {
+                        //first layer
+                        if h % kernel_size != 0 || w % kernel_size != 0 {
+                            println!("Maxpool layer's kernel size is incompatible with the model's dimensions!");
+                            continue;
+                        }
+                        model.stack.push(Layer::Maxpool(kernel_size));
+                        model.output = Output::Conv(None, h / kernel_size, w / kernel_size);
+                    }
+                    Output::Conv(Some(out_dim), h, w) => {
+                        //after conv_layer
+                        if h % kernel_size != 0 || w % kernel_size != 0 {
+                            println!("Maxpool layer's kernel size is incompatible with the model's dimensions!");
+                            continue;
+                        }
+                        model.stack.push(Layer::Maxpool(kernel_size));
+                        model.output =
+                            Output::Conv(Some(out_dim), h / kernel_size, w / kernel_size);
+                    }
+                    Output::Linear(out_features) => {
+                        println!("Cannot add maxpool layer after a linear layer!");
+                        continue;
+                    }
+                };
             } else if input[1] == "dropout" {
-                assert!(
-                    input.len() == 3,
-                    "{:?} - missing arguments",
-                    input.join(" ")
-                );
+                // assert!(
+                //     input.len() == 3,
+                //     "{:?} - missing arguments",
+                //     input.join(" ")
+                // );
+                if input.len() != 3 {
+                    println!("Incorrect number of arguments!\n Correct use is: \"add dropout p\"");
+                    continue;
+                }
                 let dropout = (input[2]).parse::<f64>().unwrap();
-                stack.push(Layer::Dropout(dropout));
+                // stack.push(Layer::Dropout(dropout));
+                model.stack.push(Layer::Dropout(dropout));
             } else if input[1] == "linear" {
-                assert!(
-                    input.len() == 4,
-                    "{:?} - missing arguments",
-                    input.join(" ")
-                );
-                let in_channels = (input[2]).parse::<i64>().unwrap();
-                let out_channels = (input[3]).parse::<i64>().unwrap();
-                stack.push(Layer::Linear(in_channels, out_channels));
+                // assert!(
+                //     input.len() == 4,
+                //     "{:?} - missing arguments",
+                //     input.join(" ")
+                // );
+                if input.len() != 4 {
+                    println!("Incorrect number of arguments!\n Correct use is: \"add linear in_features out_features\"");
+                    continue;
+                }
+                let in_features = (input[2]).parse::<i64>().unwrap();
+                let out_features = (input[3]).parse::<i64>().unwrap();
+                match model.output {
+                    Output::Conv(_, _, _) => {
+                        //first layer
+                        println!("Cannot put Linear layer as first layer, or directly after a conv layer!\n Consider adding a flatten layer first.");
+                    }
+                    Output::Linear(out_features_last) => {
+                        if in_features == out_features_last {
+                            model.stack.push(Layer::Linear(in_features, out_features));
+                            model.output = Output::Linear(out_features);
+                        } else {
+                            println!("Input dim does not match last layer's output dim!\n input : {}, output : {}",in_features,out_features_last);
+                            continue;
+                        };
+                    }
+                };
+                // stack.push(Layer::Linear(in_channels, out_channels));
+                // if let Some(out_dim) = model.out_channels {
+                //     if hid_size == in_features {
+                //         // new layer input dim matches last layer output dim
+                //         model.stack.push(Layer::Linear(in_channels, out_channels));
+                //         model.last_dim = Some(out_channels);
+                //     } else {
+                //         println!("Input dim does not match last layer's output dim!\n input : {}, output : {}",in_channels,out_dim);
+                //         continue;
+                //     }
+                // } else {
+                //     // model.last_dim = None -> first channel
+                //     println!("Cannot put Linear layer as first layer!");
+                //     continue;
+                // }
             } else if input[1] == "flatten" {
-                assert!(
-                    input.len() == 2,
-                    "{:?} - missing arguments",
-                    input.join(" ")
-                );
-                stack.push(Layer::Flatten());
+                // assert!(
+                //     input.len() == 2,
+                //     "{:?} - missing arguments",
+                //     input.join(" ")
+                // );
+                if input.len() != 2 {
+                    println!("Incorrect number of arguments!\n Correct use is: \"add flatten\"");
+                    continue;
+                }
+                match model.output {
+                    Output::Conv(None, h, w) => {
+                        //first layer
+                        model.stack.push(Layer::Flatten());
+                        model.output = Output::Linear(3*h*w);
+                    },
+                    Output::Conv(Some(out_dim), h, w) => {
+                        model.stack.push(Layer::Flatten());
+                        model.output = Output::Linear(out_dim*h*w);
+                    },
+                    Output::Linear(_out_features) => {
+                        println!("No point in adding a flatten after a linear layer. This command is skipped.");
+                        continue;
+                    },
+                };
+                // stack.push(Layer::Flatten());
             } else {
-                panic!("unknown layer name");
+                println!("Unknown layer name!");
+                continue;
             }
-        } else if input[0] == "end" {
-            break;
+        } else {
+            println!("Unknown command \"{}\"! Valid commands are:\n add layer_name [layer_options]\n build",input[0])
         }
     }
-    let model = stack
+    let model = model.stack
         .iter()
         .fold(tch::nn::seq_t(), move |model, layer| match *layer {
             Layer::ConvLayer(in_channels, out_channels, kernel_size, stride, padding, bias) => {
@@ -379,6 +552,7 @@ pub fn construct_model(vs: &nn::Path) -> SequentialT {
     println!("{:#?}", stack);
     model
 }
+
 pub fn train_model(
     vs: &nn::Path,
     model: &dyn ModuleT,
