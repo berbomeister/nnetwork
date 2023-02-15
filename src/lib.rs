@@ -255,7 +255,7 @@ pub fn test() -> Result<()> {
 }
 #[derive(Debug)]
 enum Layer {
-    ConvLayer(i64, i64, i64, i64, i64, bool),
+    ConvLayer(i64, i64, i64, Option<i64>, Option<i64>, bool),
     Maxpool(i64),
     Dropout(f64),
     Flatten(),
@@ -327,11 +327,11 @@ pub fn construct_model(vs: &nn::Path) -> SequentialT {
                 let out_channels = i64::from_str_radix(input[3], 10).unwrap();
                 let kernel_size = i64::from_str_radix(input[4], 10).unwrap();
                 let (stride, padding) = if input[5] == "--default" {
-                    (1, 0)
+                    (None, Some(1))
                 } else {
                     (
-                        i64::from_str_radix(input[5], 10).unwrap(),
-                        i64::from_str_radix(input[6], 10).unwrap(),
+                        Some(i64::from_str_radix(input[5], 10).unwrap()),
+                        Some(i64::from_str_radix(input[6], 10).unwrap()),
                     )
                 };
                 match model.output {
@@ -445,6 +445,7 @@ pub fn construct_model(vs: &nn::Path) -> SequentialT {
                     }
                     Output::Conv(Some(out_dim), h, w) => {
                         model.stack.push(Layer::Flatten());
+                        // println!("{}",out_dim * h * w);
                         model.output = Output::Linear(out_dim * h * w);
                     }
                     Output::Linear(_out_features) => {
@@ -463,21 +464,21 @@ pub fn construct_model(vs: &nn::Path) -> SequentialT {
     let net = model
         .stack
         .iter()
-        .fold(tch::nn::seq_t(), move |model, layer| match *layer {
+        .fold(tch::nn::seq_t().add_fn(|x| {println!("{:?}",x.size());x.max_pool2d_default(1)}), move |model, layer| match *layer {
             Layer::ConvLayer(in_channels, out_channels, kernel_size, stride, padding, bias) => {
                 model.add(conv2d_sublayer(
                     vs,
                     in_channels,
                     out_channels,
                     kernel_size,
-                    Some(stride),
-                    Some(padding),
+                    stride,
+                    padding,
                     bias,
                 ))
             }
             Layer::Maxpool(kernel) => model.add_fn(move |x| x.max_pool2d_default(kernel)),
             Layer::Dropout(dropout) => model.add_fn_t(move |x, train| x.dropout(dropout, train)),
-            Layer::Flatten() => model.add_fn(|x| x.flat_view()),
+            Layer::Flatten() => model.add_fn(|x| {println!("{:?}",x.size());x.flat_view()}),
             Layer::Linear(in_channels, out_channels) => model.add(tch::nn::linear(
                 vs,
                 in_channels,
