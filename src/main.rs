@@ -1,4 +1,4 @@
-use std::{fs::File, io::{IoSlice, Write, Read, BufRead}};
+use std::{fs::File, io::{ Write, Read}};
 
 use nnetwork::*;
 use tch::nn::OptimizerConfig;
@@ -14,7 +14,7 @@ use anyhow::{Ok, Result};
 pub fn main() -> Result<()> {
     // let _r = test();
 
-    // cli()?;
+    cli()?;
 
     // let str = "models/fastnet1.model";
     // let t = str.to_string().split(".").collect::<Vec<&str>>()[0].to_string();
@@ -34,26 +34,26 @@ pub fn main() -> Result<()> {
     //     //read arguments and do action
     // }
     
-    let mut vs = tch::nn::VarStore::new(tch::Device::cuda_if_available());
+    // let mut vs = tch::nn::VarStore::new(tch::Device::cuda_if_available());
 
-    let (model,stack) = construct_model(&vs.root());
-    let modelname = "architectures/test1";
+    // let (model,stack) = construct_model(&vs.root());
+    // let modelname = "architectures/test1";
     
-    //save model
-    let mut file = File::create(modelname).expect("Unable to create file for model architecture.");
-    println!("{:#?}",stack);
-    let ser = serde_json::to_string(&stack)?;
-    println!("{}",ser.as_str());
-    file.write(ser.as_bytes())?;
+    // //save model
+    // let mut file = File::create(modelname).expect("Unable to create file for model architecture.");
+    // println!("{:#?}",stack);
+    // let ser = serde_json::to_string(&stack)?;
+    // println!("{}",ser.as_str());
+    // file.write(ser.as_bytes())?;
 
-    //load model
-    let mut buf =String::new();
-    File::open(modelname)?.read_to_string(&mut buf)?;
-    println!("{}",buf);
-    let deser :Vec<Layer> = serde_json::from_str(buf.as_str())?;
-    println!("{:#?}",deser);
+    // //load model
+    // let mut buf =String::new();
+    // File::open(modelname)?.read_to_string(&mut buf)?;
+    // println!("{}",buf);
+    // let deser :Vec<Layer> = serde_json::from_str(buf.as_str())?;
+    // println!("{:#?}",deser);
 
-    
+
     // for layer in stack{
     //     let serialized = serde_json::to_string(&layer)?;
     //     file.write(serialized.as_bytes())?;

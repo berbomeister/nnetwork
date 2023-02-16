@@ -1,10 +1,14 @@
 use anyhow::{Ok, Result};
-use std::io::Write;
+use serde::{Deserialize, Serialize};
+use std::fmt::format;
 use std::{fs, vec};
+use std::{
+    fs::File,
+    io::{Read, Write},
+};
 use tch::nn::{ModuleT, Optimizer, OptimizerConfig, SequentialT};
 use tch::vision::dataset::Dataset;
 use tch::{nn, Device};
-use serde::{Serialize, Deserialize};
 
 pub fn learning_rate(epoch: i64) -> f64 {
     if epoch < 15 {
@@ -255,7 +259,7 @@ pub fn test() -> Result<()> {
     Ok(())
 }
 
-#[derive(Debug,Serialize,Deserialize)]
+#[derive(Debug, Serialize, Deserialize)]
 pub enum Layer {
     ConvLayer(i64, i64, i64, Option<i64>, Option<i64>, bool),
     Maxpool(i64),
@@ -305,7 +309,7 @@ impl Model {
 /// - ### build
 ///     -> builds and returns the model
 ///
-pub fn construct_model(vs: &nn::Path) -> (SequentialT,Vec<Layer>) {
+pub fn construct_model(vs: &nn::Path) -> (SequentialT, Vec<Layer>) {
     let mut model = Model::new();
     loop {
         let mut user_input = String::new();
@@ -492,7 +496,7 @@ pub fn construct_model(vs: &nn::Path) -> (SequentialT,Vec<Layer>) {
         });
     // println!("{:#?}", net);
     // println!("{:#?}", model.stack);
-    (net,model.stack)
+    (net, model.stack)
 }
 
 pub fn train_model(
@@ -533,11 +537,19 @@ pub fn load_model(vs: &mut nn::VarStore, filename: &str) -> Result<()> {
     vs.load(filename)?;
     Ok(())
 }
-pub fn load_net(net: &SequentialT, modelname: &str) -> Result<()> {
-    todo!()
+pub fn load_net(modelname: &str) -> Result<Vec<Layer>> {
+    let mut buf = String::new();
+    let path = format!("architectures/{modelname}");
+    File::open(path)?.read_to_string(&mut buf)?;
+    let deser: Vec<Layer> = serde_json::from_str(buf.as_str())?;
+    Ok(deser)
 }
-pub fn save_net(net: &SequentialT, modelname: &str) -> Result<()> {
-    todo!()
+pub fn save_net(stack: &Vec<Layer>, modelname: &str) -> Result<()> {
+    let path = format!("architectures/{modelname}");
+    let mut file = File::create(path)?;
+    let ser = serde_json::to_string(&stack)?;
+    file.write(ser.as_bytes())?;
+    Ok(())
 }
 pub fn accuracy_model(model: &dyn ModuleT, data: &Dataset, device: &Device) -> f64 {
     let _no_grad = tch::no_grad_guard();
@@ -597,6 +609,7 @@ pub fn cli() -> Result<()> {
     let mut vs = tch::nn::VarStore::new(tch::Device::cuda_if_available());
     let mut loaded_model = false;
     let mut net = nn::seq_t();
+    let mut stack: Vec<Layer> = Vec::new();
     loop {
         let mut user_input = String::new();
         print!(">>");
@@ -606,6 +619,7 @@ pub fn cli() -> Result<()> {
         let input = &user_input.trim().split(" ").collect::<Vec<&str>>();
         // println!("-{:#?}-", input);
         match input[0] {
+            //help [command]
             "help" => {
                 if input.len() == 1 {
                     let help = fs::read_to_string("txt/help/all")?;
@@ -620,17 +634,36 @@ pub fn cli() -> Result<()> {
                     }
                 };
             }
+            //load modelname
             "load" => {
                 if input.len() != 2 {
                     println!("Wrong syntax. Type help load for more information");
                     continue;
                 }
-                let pathname = input[1];
-                let modelname = modelname(pathname);
-                load_net(&net, modelname.as_str())?;
-                load_model(&mut vs, pathname)?;
+                let modelname = input[1];
+                let path = format!("models/{modelname}.model");
+                let pre_trained = vec!["cnn1", "fastnet1", "fastnet2"];
+                if pre_trained.contains(&modelname) {
+                    match modelname {
+                        "cnn1" => {
+                            net = cnn1(&vs.root());
+                        }
+                        "fastnet1" => {
+                            net = fast_resnet(&vs.root());
+                        }
+                        "fastnet2" => {
+                            net = fast_resnet2(&vs.root());
+                        }
+                        _ => (),
+                    }
+                } else {
+                    let _stack = load_net(&modelname)?;
+                    net = from_stack(_stack, &vs.root());
+                }
+                load_model(&mut vs, &path)?;
                 loaded_model = true;
             }
+            // save modelname
             "save" => {
                 if input.len() != 2 {
                     println!("Wrong syntax. Type help save for more information.");
@@ -640,19 +673,26 @@ pub fn cli() -> Result<()> {
                     println!("No loaded model, ignoring this command!");
                     continue;
                 }
-                let pathname = input[1];
-                let modelname = modelname(pathname);
-                save_model(&vs, pathname)?;
-                save_net(&net, modelname.as_str())?;
+                let modelname = input[1];
+                let path = format!("models/{modelname}.model");
+                let pre_trained = vec!["cnn1", "fastnet1", "fastnet2"];
+                if pre_trained.contains(&modelname) {
+                    save_model(&vs, &path)?;
+                } else {
+                    save_model(&vs, &path)?;
+                    save_net(&stack, modelname)?;
+                }
             }
+            //construct
             "construct" => {
                 if input.len() != 1 {
                     println!("This command does not take any arguments, they will be ignored!");
                 }
-                let _t;
-                (net,_t) = construct_model(&vs.root());
+                vs = tch::nn::VarStore::new(tch::Device::cuda_if_available());
+                (net, stack) = construct_model(&vs.root());
                 loaded_model = true;
             }
+            //train optimizer epochs
             "train" => {
                 if input.len() != 3 {
                     println!("Wrong syntax. Type help train for more information.");
@@ -672,6 +712,7 @@ pub fn cli() -> Result<()> {
                 train_model(&vs.root(), &net, &mut optim, &data, epochs);
                 println!("Finished Training! Maybe test accuracy now?");
             }
+            //accuracy
             "accuracy" => {
                 if input.len() != 1 {
                     println!("This command does not take any arguments, they will be ignored!");
@@ -685,6 +726,7 @@ pub fn cli() -> Result<()> {
                     accuracy_model(&net, &data, &vs.device())
                 );
             }
+            //predict image
             "predict" => {
                 if input.len() != 2 {
                     println!("Wrong syntax. Type help train for more information.");
@@ -694,10 +736,12 @@ pub fn cli() -> Result<()> {
                     println!("No loaded model, ignoring this command!");
                     continue;
                 }
-                let imagepath = input[1];
-                let prediction = predict(&net, imagepath, &vs.device())?;
+                let image = input[1];
+                let path = format!("test/{image}");
+                let prediction = predict(&net, &path, &vs.device())?;
                 println!("The model predicted: {}", prediction.as_str());
             }
+            //exit
             "exit" => {
                 break;
             }
@@ -709,8 +753,34 @@ pub fn cli() -> Result<()> {
     Ok(())
 }
 
-pub fn modelname(pathname: &str) -> String {
+pub fn get_modelname(pathname: &str) -> String {
     let _t = pathname.to_string().split(".").collect::<Vec<&str>>()[0].to_string();
     let name = _t.split('/').collect::<Vec<&str>>()[1].clone();
     String::from(name)
+}
+pub fn from_stack(stack: Vec<Layer>, vs: &nn::Path) -> SequentialT {
+    stack
+        .iter()
+        .fold(tch::nn::seq_t(), move |model, layer| match *layer {
+            Layer::ConvLayer(in_channels, out_channels, kernel_size, stride, padding, bias) => {
+                model.add(conv2d_sublayer(
+                    vs,
+                    in_channels,
+                    out_channels,
+                    kernel_size,
+                    stride,
+                    padding,
+                    bias,
+                ))
+            }
+            Layer::Maxpool(kernel) => model.add_fn(move |x| x.max_pool2d_default(kernel)),
+            Layer::Dropout(dropout) => model.add_fn_t(move |x, train| x.dropout(dropout, train)),
+            Layer::Flatten() => model.add_fn(|x| x.flat_view()),
+            Layer::Linear(in_channels, out_channels) => model.add(tch::nn::linear(
+                vs,
+                in_channels,
+                out_channels,
+                Default::default(),
+            )),
+        })
 }
