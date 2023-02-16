@@ -1,6 +1,7 @@
 use anyhow::{Ok, Result};
 use serde::{Deserialize, Serialize};
 use std::{
+    fmt::Display,
     fs,
     fs::File,
     io::{Read, Write},
@@ -254,6 +255,8 @@ pub enum Layer {
     Flatten(),
     Linear(i64, i64),
 }
+#[derive(Debug, Serialize, Deserialize)]
+pub struct Layers(pub Vec<Layer>);
 #[derive(Debug)]
 enum Output {
     Conv(Option<i64>, i64, i64),
@@ -261,13 +264,13 @@ enum Output {
 }
 #[derive(Debug)]
 struct Model {
-    stack: Vec<Layer>,
+    stack: Layers,
     output: Output,
 }
 impl Model {
     fn new() -> Model {
         Model {
-            stack: Vec::new(),
+            stack: Layers(Vec::new()),
             output: Output::Conv(None, 32, 32),
         }
     }
@@ -296,7 +299,7 @@ impl Model {
 /// - ### build
 ///     -> builds and returns the model
 ///
-pub fn construct_model(vs: &nn::Path) -> (SequentialT, Vec<Layer>) {
+pub fn construct_model(vs: &nn::Path) -> (SequentialT, Layers) {
     let mut model = Model::new();
     loop {
         let mut user_input = String::new();
@@ -330,7 +333,7 @@ pub fn construct_model(vs: &nn::Path) -> (SequentialT, Vec<Layer>) {
                 match model.output {
                     Output::Conv(None, h, w) => {
                         //first conv layer
-                        model.stack.push(Layer::ConvLayer(
+                        model.stack.0.push(Layer::ConvLayer(
                             in_channels,
                             out_channels,
                             kernel_size,
@@ -343,7 +346,7 @@ pub fn construct_model(vs: &nn::Path) -> (SequentialT, Vec<Layer>) {
                     Output::Conv(Some(out_dim), h, w) => {
                         if out_dim == in_channels {
                             // new layer input dim matches last layer output dim
-                            model.stack.push(Layer::ConvLayer(
+                            model.stack.0.push(Layer::ConvLayer(
                                 in_channels,
                                 out_channels,
                                 kernel_size,
@@ -374,7 +377,7 @@ pub fn construct_model(vs: &nn::Path) -> (SequentialT, Vec<Layer>) {
                             println!("Maxpool layer's kernel size is incompatible with the model's dimensions!");
                             continue;
                         }
-                        model.stack.push(Layer::Maxpool(kernel_size));
+                        model.stack.0.push(Layer::Maxpool(kernel_size));
                         model.output = Output::Conv(None, h / kernel_size, w / kernel_size);
                     }
                     Output::Conv(Some(out_dim), h, w) => {
@@ -383,7 +386,7 @@ pub fn construct_model(vs: &nn::Path) -> (SequentialT, Vec<Layer>) {
                             println!("Maxpool layer's kernel size is incompatible with the model's dimensions!");
                             continue;
                         }
-                        model.stack.push(Layer::Maxpool(kernel_size));
+                        model.stack.0.push(Layer::Maxpool(kernel_size));
                         model.output =
                             Output::Conv(Some(out_dim), h / kernel_size, w / kernel_size);
                     }
@@ -402,7 +405,7 @@ pub fn construct_model(vs: &nn::Path) -> (SequentialT, Vec<Layer>) {
                     println!("Dropout probability should be between 0 and 1.");
                     continue;
                 }
-                model.stack.push(Layer::Dropout(dropout));
+                model.stack.0.push(Layer::Dropout(dropout));
             } else if input[1] == "linear" {
                 if input.len() != 4 {
                     println!("Incorrect number of arguments!\n Correct use is: \"add linear in_features out_features\"");
@@ -419,6 +422,7 @@ pub fn construct_model(vs: &nn::Path) -> (SequentialT, Vec<Layer>) {
                         if in_features == out_features_last || in_features == -1 {
                             model
                                 .stack
+                                .0
                                 .push(Layer::Linear(out_features_last, out_features));
                             model.output = Output::Linear(out_features);
                         } else {
@@ -435,12 +439,11 @@ pub fn construct_model(vs: &nn::Path) -> (SequentialT, Vec<Layer>) {
                 match model.output {
                     Output::Conv(None, h, w) => {
                         //first layer
-                        model.stack.push(Layer::Flatten());
+                        model.stack.0.push(Layer::Flatten());
                         model.output = Output::Linear(3 * h * w);
                     }
                     Output::Conv(Some(out_dim), h, w) => {
-                        model.stack.push(Layer::Flatten());
-                        // println!("{}",out_dim * h * w);
+                        model.stack.0.push(Layer::Flatten());
                         model.output = Output::Linear(out_dim * h * w);
                     }
                     Output::Linear(_out_features) => {
@@ -458,6 +461,7 @@ pub fn construct_model(vs: &nn::Path) -> (SequentialT, Vec<Layer>) {
     }
     let net = model
         .stack
+        .0
         .iter()
         .fold(tch::nn::seq_t(), move |model, layer| match *layer {
             Layer::ConvLayer(in_channels, out_channels, kernel_size, stride, padding, bias) => {
@@ -481,8 +485,6 @@ pub fn construct_model(vs: &nn::Path) -> (SequentialT, Vec<Layer>) {
                 Default::default(),
             )),
         });
-    // println!("{:#?}", net);
-    // println!("{:#?}", model.stack);
     (net, model.stack)
 }
 
@@ -524,14 +526,14 @@ pub fn load_model(vs: &mut nn::VarStore, filename: &str) -> Result<()> {
     vs.load(filename)?;
     Ok(())
 }
-pub fn load_net(modelname: &str) -> Result<Vec<Layer>> {
+pub fn load_net(modelname: &str) -> Result<Layers> {
     let mut buf = String::new();
     let path = format!("architectures/{modelname}");
     File::open(path)?.read_to_string(&mut buf)?;
-    let deser: Vec<Layer> = serde_json::from_str(buf.as_str())?;
+    let deser: Layers = serde_json::from_str(buf.as_str())?;
     Ok(deser)
 }
-pub fn save_net(stack: &Vec<Layer>, modelname: &str) -> Result<()> {
+pub fn save_net(stack: &Layers, modelname: &str) -> Result<()> {
     let path = format!("architectures/{modelname}");
     let mut file = File::create(path)?;
     let ser = serde_json::to_string(&stack)?;
@@ -567,16 +569,10 @@ pub fn predict(model: &dyn ModuleT, imagepath: &str, device: &Device) -> Result<
         .to_device(*device)
         / 255;
 
-    // println!("{}", &image);
-    // println!(
-    //     "{}",
-    //     model.forward_t(&image, false).softmax(-1, tch::Kind::Float)*100
-    // );
     let (_value, index) = model
         .forward_t(&image, false)
         .softmax(-1, tch::Kind::Float)
         .topk(1, -1, true, true);
-    // println!("prediction : {}", classes[index.int64_value(&[0]) as usize]);
     Ok(String::from(classes[index.int64_value(&[0]) as usize]))
 }
 
@@ -596,7 +592,7 @@ pub fn cli() -> Result<()> {
     let mut vs = tch::nn::VarStore::new(tch::Device::cuda_if_available());
     let mut loaded_model = false;
     let mut net = nn::seq_t();
-    let mut stack: Vec<Layer> = Vec::new();
+    let mut stack: Layers = Layers(Vec::new());
     loop {
         let mut user_input = String::new();
         print!(">>");
@@ -604,7 +600,6 @@ pub fn cli() -> Result<()> {
         let stdin = std::io::stdin();
         let _e = stdin.read_line(&mut user_input);
         let input = &user_input.trim().split(" ").collect::<Vec<&str>>();
-        // println!("-{:#?}-", input);
         match input[0] {
             //help [command]
             "help" => {
@@ -647,10 +642,10 @@ pub fn cli() -> Result<()> {
                 } else {
                     stack = load_net(&modelname)?;
                     net = from_stack(&stack, &vs.root());
-                    println!("{:#?}",stack);
                 }
                 load_model(&mut vs, &path)?;
                 loaded_model = true;
+                println!("Model successfully loaded.");
             }
             // save modelname
             "save" => {
@@ -671,6 +666,7 @@ pub fn cli() -> Result<()> {
                     save_model(&vs, &path)?;
                     save_net(&stack, modelname)?;
                 }
+                println!("Model successfully saved.");
             }
             //construct
             "construct" => {
@@ -679,8 +675,8 @@ pub fn cli() -> Result<()> {
                 }
                 vs = tch::nn::VarStore::new(tch::Device::cuda_if_available());
                 (net, stack) = construct_model(&vs.root());
-                println!("{:#?}",stack);
                 loaded_model = true;
+                println!("Model successfully built.");
             }
             //train optimizer epochs
             "train" => {
@@ -713,7 +709,7 @@ pub fn cli() -> Result<()> {
                 };
                 println!(
                     "The accuracy of the current model is {:.2}%",
-                    accuracy_model(&net, &data, &vs.device())*100.
+                    accuracy_model(&net, &data, &vs.device()) * 100.
                 );
             }
             //predict image
@@ -730,6 +726,16 @@ pub fn cli() -> Result<()> {
                 let path = format!("test/{image}");
                 let prediction = predict(&net, &path, &vs.device())?;
                 println!("The model predicted: {}", prediction.as_str());
+            }
+            "view" => {
+                if input.len() != 1 {
+                    println!("This command does not take any arguments, they will be ignored!");
+                };
+                if !loaded_model {
+                    println!("No loaded model, ignoring this command!");
+                    continue;
+                };
+                println!("{}", stack);
             }
             //exit
             "exit" => {
@@ -748,8 +754,9 @@ pub fn get_modelname(pathname: &str) -> String {
     let name = _t.split('/').collect::<Vec<&str>>()[1].clone();
     String::from(name)
 }
-pub fn from_stack(stack: &Vec<Layer>, vs: &nn::Path) -> SequentialT {
+pub fn from_stack(stack: &Layers, vs: &nn::Path) -> SequentialT {
     stack
+        .0
         .iter()
         .fold(tch::nn::seq_t(), move |model, layer| match *layer {
             Layer::ConvLayer(in_channels, out_channels, kernel_size, stride, padding, bias) => {
@@ -773,4 +780,26 @@ pub fn from_stack(stack: &Vec<Layer>, vs: &nn::Path) -> SequentialT {
                 Default::default(),
             )),
         })
+}
+impl Display for Layer {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match *self {
+            Layer::ConvLayer(ic, oc, ks, s, p, b) => {
+                write!(f, "ConvLayer({ic},{oc},{ks},{:?},{:?},{b})", s, p)
+            }
+            Layer::Maxpool(ks) => write!(f, "Maxpooling({ks})"),
+            Layer::Dropout(p) => write!(f, "Dropout({p})"),
+            Layer::Flatten() => write!(f, "Flatten"),
+            Layer::Linear(ic, oc) => write!(f, "Linear({ic},{oc})"),
+        }
+    }
+}
+impl Display for Layers {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(f, "Input Tensor-> ")?;
+        for layer in &self.0 {
+            write!(f, "{layer}-> ").unwrap();
+        }
+        write!(f, "Output Tensor")
+    }
 }
