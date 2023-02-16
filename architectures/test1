@@ -1,1 +1,1 @@
-[{"ConvLayer":[3,64,3,null,1,true]},{"ConvLayer":[64,256,3,null,1,true]},{"Maxpool":4},{"Dropout":0.3},{"ConvLayer":[256,512,3,null,1,true]},{"Maxpool":4},{"Dropout":0.2},{"Flatten":[]},{"Linear":[2048,10]}]
+[{"ConvLayer":[3,64,3,null,1,true]},{"ConvLayer":[64,128,3,null,1,true]},{"Maxpool":4},{"Dropout":0.3},{"Flatten":[]},{"Linear":[8192,10]}]

@@ -1,8 +1,7 @@
 use anyhow::{Ok, Result};
 use serde::{Deserialize, Serialize};
-use std::fmt::format;
-use std::{fs, vec};
 use std::{
+    fs,
     fs::File,
     io::{Read, Write},
 };
@@ -220,7 +219,6 @@ pub fn test() -> Result<()> {
         "2" => fast_resnet2(&vs.root()),
         _ => cnn1(&vs.root()),
     };
-    // vs.load("models/model1.model")?;
     let mut opt = nn::Sgd {
         momentum: 0.9,
         dampening: 0.,
@@ -240,22 +238,11 @@ pub fn test() -> Result<()> {
             let pred = net.forward_t(&bimages, true);
             let loss = pred.cross_entropy_for_logits(&blabels);
             opt.backward_step(&loss);
-            // if i % 100 == 0 {
-            //     let test_accuracy =
-            //         net.batch_accuracy_for_logits(&m.test_images, &m.test_labels, vs.device(), 512);
-            //     println!(
-            //         "epoch: {:4}, batch: {:5}, test acc: {:5.2}%",
-            //         epoch,
-            //         i,
-            //         100. * test_accuracy,
-            //     );
-            // }
         }
         let test_accuracy =
             net.batch_accuracy_for_logits(&m.test_images, &m.test_labels, vs.device(), 512);
         println!("epoch: {:4} test acc: {:5.2}%", epoch, 100. * test_accuracy,);
     }
-    vs.save("models/fastnet1.model")?;
     Ok(())
 }
 
@@ -580,7 +567,7 @@ pub fn predict(model: &dyn ModuleT, imagepath: &str, device: &Device) -> Result<
         .to_device(*device)
         / 255;
 
-    println!("{}", &image);
+    // println!("{}", &image);
     // println!(
     //     "{}",
     //     model.forward_t(&image, false).softmax(-1, tch::Kind::Float)*100
@@ -589,7 +576,7 @@ pub fn predict(model: &dyn ModuleT, imagepath: &str, device: &Device) -> Result<
         .forward_t(&image, false)
         .softmax(-1, tch::Kind::Float)
         .topk(1, -1, true, true);
-    println!("prediction : {}", classes[index.int64_value(&[0]) as usize]);
+    // println!("prediction : {}", classes[index.int64_value(&[0]) as usize]);
     Ok(String::from(classes[index.int64_value(&[0]) as usize]))
 }
 
@@ -643,6 +630,7 @@ pub fn cli() -> Result<()> {
                 let modelname = input[1];
                 let path = format!("models/{modelname}.model");
                 let pre_trained = vec!["cnn1", "fastnet1", "fastnet2"];
+                vs = tch::nn::VarStore::new(tch::Device::cuda_if_available());
                 if pre_trained.contains(&modelname) {
                     match modelname {
                         "cnn1" => {
@@ -657,8 +645,9 @@ pub fn cli() -> Result<()> {
                         _ => (),
                     }
                 } else {
-                    let _stack = load_net(&modelname)?;
-                    net = from_stack(_stack, &vs.root());
+                    stack = load_net(&modelname)?;
+                    net = from_stack(&stack, &vs.root());
+                    println!("{:#?}",stack);
                 }
                 load_model(&mut vs, &path)?;
                 loaded_model = true;
@@ -690,6 +679,7 @@ pub fn cli() -> Result<()> {
                 }
                 vs = tch::nn::VarStore::new(tch::Device::cuda_if_available());
                 (net, stack) = construct_model(&vs.root());
+                println!("{:#?}",stack);
                 loaded_model = true;
             }
             //train optimizer epochs
@@ -722,8 +712,8 @@ pub fn cli() -> Result<()> {
                     continue;
                 };
                 println!(
-                    "The accuracy of the current model is {}",
-                    accuracy_model(&net, &data, &vs.device())
+                    "The accuracy of the current model is {:.2}%",
+                    accuracy_model(&net, &data, &vs.device())*100.
                 );
             }
             //predict image
@@ -758,7 +748,7 @@ pub fn get_modelname(pathname: &str) -> String {
     let name = _t.split('/').collect::<Vec<&str>>()[1].clone();
     String::from(name)
 }
-pub fn from_stack(stack: Vec<Layer>, vs: &nn::Path) -> SequentialT {
+pub fn from_stack(stack: &Vec<Layer>, vs: &nn::Path) -> SequentialT {
     stack
         .iter()
         .fold(tch::nn::seq_t(), move |model, layer| match *layer {

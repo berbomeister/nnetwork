@@ -16,23 +16,6 @@ pub fn main() -> Result<()> {
 
     cli()?;
 
-    // let str = "models/fastnet1.model";
-    // let t = str.to_string().split(".").collect::<Vec<&str>>()[0].to_string();
-    // let name = t.split('/').collect::<Vec<&str>>()[1];
-    // println!("{:?}",name);
-    // println!("{:?}",modelname(str));
-    // println!("{}","123".parse::<i64>()?);
-    // let welcome = std::fs::read_to_string("txt/welcome")?;
-    // println!("{welcome}");
-    // let args: Vec<String> = std::env::args().collect();
-    // println!("{:#?}",args);
-    // if args.len() == 1 {
-    //     // println!("asdasdasd");
-    //     cli()?;
-    // }
-    // else {
-    //     //read arguments and do action
-    // }
     
     // let mut vs = tch::nn::VarStore::new(tch::Device::cuda_if_available());
 
