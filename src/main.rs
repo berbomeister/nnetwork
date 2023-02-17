@@ -1,10 +1,7 @@
-use nnetwork::*;
 use anyhow::{Ok, Result};
+use nnetwork::*;
 pub fn main() -> Result<()> {
-
     cli()?;
-
-
     Ok(())
 }
 // add conv_layer 3 64 3 --default
