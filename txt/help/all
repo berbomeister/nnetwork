@@ -1,1 +1,11 @@
-Help for all 
+    Available commands are:
+    construct                       opens command interface to create a new neural network
+    load [modelname]                loads an existing model with the specified name, if such exists
+    save [modelname]                saves the current loaded as a new model with the specified name, or updates an existing model
+    predict imagefile               uses the current model to predict contents of the image(using the cifar-10 classes)
+    accuracy                        prints out the current model's accuracy, tested on the cifar-10 test batch
+    train [optimizer] [n_epochs]    trains the model on the cifar-10 corpus, using the specified optimizer for n epochs 
+    view                            show pipeline of current model
+    exit                            exits the program
+
+    Type "help [command]" for further info

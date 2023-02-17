@@ -1,1 +1,12 @@
-help for accuracy
+    Accuracy:
+
+    Use "accuracy"
+
+    Prints out the current model's accuracy based on the test batch(10000 images, 1000 for each class).
+    There are   10 classes - airplane, automobile, bird, cat, deer, dog, frog, horse, ship and truck.
+
+    Example:
+    >>load fastnet1
+    Model successfully loaded.
+    >>accuracy
+    The accuracy of the current model is 84.77%

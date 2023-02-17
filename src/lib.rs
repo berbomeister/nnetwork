@@ -296,6 +296,10 @@ pub fn construct_model(vs: &nn::Path) -> (SequentialT, Layers) {
                 match model.output {
                     Output::Conv(None, h, w) => {
                         //first conv layer
+                        if in_channels != 3 {
+                            println!("Input tensor has size (3,32,32), first layer must have 3 input channels!");
+                            continue;
+                        }
                         model.stack.0.push(Layer::ConvLayer(
                             in_channels,
                             out_channels,
@@ -558,6 +562,7 @@ pub fn cli() -> Result<()> {
         "train",
         "accuracy",
         "predict",
+        "view",
     ];
     let data = tch::vision::cifar::load_dir("data")?;
     let mut vs = tch::nn::VarStore::new(tch::Device::cuda_if_available());

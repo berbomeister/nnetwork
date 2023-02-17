@@ -1,1 +1,13 @@
-help for load
+    Load:
+
+    Use "load modelname"
+
+    Attempts to load a new neural network with the name modelname.
+    If such exists, successfully overwrites any previous model.
+    Else the program panics and exits with error code. 
+
+    Example:
+    >>load fastnet1
+    Model successfully loaded.
+    >>accuracy
+    The accuracy of the current model is 84.77%

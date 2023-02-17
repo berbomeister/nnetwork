@@ -1,1 +1,33 @@
-help for construct
+    Construct:
+
+    Use "construct"
+
+    Used to initialize the coomand interface for creating a new neural network. Available commands are "add" and "build".
+    The former takes parameters specifying the layer to add, while the latter builds the network as is.
+    possible arguments for add are:
+    add conv_layer in_c out_c k_size ["--default" | stride padding] :
+        Adds a convolution layer with in_c in channels, out_c output channels, k_size kernel size and stride and padding (default values are 0, 1)
+    add maxpool k_size :
+        Adds a 2D maxpool layer with kernel size (k_size,k,size)
+    add dropout p :
+        Adds a Dropout layer with dropout probability = p
+    add linear in_f out_f :
+        Adds a Linear layer with in_f in features and out_f output features
+    add flatten :
+        Adds a layer that flattens all dimensions, except the first, which is understood as batch size
+    add relu :
+        Adds an activation layer for the function relu(x) = max(0,x)
+
+    Example:
+
+    >>construct
+    add conv_layer 3 64 3 --default
+    add conv_layer 64 256 3 --default
+    add maxpool 4
+    add dropout 0.3
+    add conv_layer 256 512 3 --default
+    add maxpool 4
+    add dropout 0.2
+    add flatten
+    add linear -1 10
+    build

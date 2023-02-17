@@ -1,1 +1,13 @@
-save
+    Save:
+
+    Use "save modelname"
+
+    Saves the currently loaded model as modelname. If no model is
+    loaded the command is ignored. If a model with the same name  already
+    existed, it is overwritten.
+
+    Example:
+    >>load fastnet1
+    Model successfully loaded
+    >>save fastnet1_test
+    Model successfully saved

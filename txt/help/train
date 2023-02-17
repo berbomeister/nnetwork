@@ -1,1 +1,17 @@
-help for train
+    Train:
+
+    Use "train optim epochs"
+
+    Trains the current model, using the optim, for specified epochs.
+    If no model has been loaded, the command is ignored. Currently supports
+    Adam and SGD optimizer with default values. learning_rate for optimizers
+    is dependant on train epoch, using the method learning_rate(epoch).
+
+    Example:
+    >>load fastnet1
+    Model successfully loaded
+    >>train adam 1
+    epoch:    1 test acc: 45.21%
+    Finished Training! Maybe test accuracy now?
+    >>accuracy
+    The accuracy of the current model is 45.21%

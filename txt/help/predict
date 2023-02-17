@@ -1,1 +1,12 @@
-help for predict
+    Predict:
+
+    Use "predict image"
+
+    Uses the currently loaded model to predict the contents of specified
+    image. The model currently supports .png, .jpg, .jfif (and maybe more?).
+
+    Example:
+    >>load fastnet1
+    Model successfully loaded
+    >>predict truck.jfif
+    The model predicted: truck

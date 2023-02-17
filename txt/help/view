@@ -1,0 +1,15 @@
+    View:
+
+    Use "view"
+
+    Shows the architecture/ data flow of the current model. 
+
+    Example:
+
+    >>load fastnet1
+    Model successfully loaded
+    >>view
+    Input Tensor-> ConvLayer(3,64,3,None,Some(1),true)-> 
+    ConvLayer(64,256,3,None,Some(1),true) -> Maxpool(4)-> 
+    Dropout(0.25)-> ConvLayer(256,512,3,None,Some(1),true)-> 
+    Maxpool(2)-> Maxpool(4)-> Flatten-> Linear(512,10)-> Output Tensor
