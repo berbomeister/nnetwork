@@ -123,7 +123,7 @@ pub fn cnn1(vs: &nn::Path) -> SequentialT {
             Some(0.25),
         ))
         .add(layer(
-            &vs.sub("layer2"),
+            &vs.sub("layer3"),
             128,
             256,
             3,
@@ -133,14 +133,14 @@ pub fn cnn1(vs: &nn::Path) -> SequentialT {
             2,
             Some(0.25),
         ))
-        .add_fn(|x| x.flatten(1, 3).relu())
+        .add_fn(|x| x.flatten(1, 3))
         .add(nn::linear(
             &vs.sub("output1"),
             256 * 4 * 4,
             512,
             Default::default(),
         ))
-        .add_fn(|x| x.relu())
+        // .add_fn(|x| x.relu())
         .add(nn::linear(&vs.sub("output2"), 512, 10, Default::default()))
 }
 pub fn fast_resnet2(vs: &nn::Path) -> SequentialT {
@@ -215,6 +215,8 @@ pub enum Layer {
     Dropout(f64),
     Flatten(),
     Linear(i64, i64),
+    Relu(),
+    Other(String),
 }
 #[derive(Debug, Serialize, Deserialize)]
 pub struct Layers(pub Vec<Layer>);
@@ -412,6 +414,12 @@ pub fn construct_model(vs: &nn::Path) -> (SequentialT, Layers) {
                         continue;
                     }
                 };
+            } else if input[1] == "relu" {
+                if input.len() != 2 {
+                    println!("ReLu does not take arguments!\n Correct use is: \"add relu\"");
+                    continue;
+                }
+                model.stack.0.push(Layer::Relu());
             } else {
                 println!("Unknown layer name!");
                 continue;
@@ -445,6 +453,8 @@ pub fn construct_model(vs: &nn::Path) -> (SequentialT, Layers) {
                 out_channels,
                 Default::default(),
             )),
+            Layer::Relu() => model.add_fn(|x| x.relu()),
+            _ => model,
         });
     (net, model.stack)
 }
@@ -591,12 +601,15 @@ pub fn cli() -> Result<()> {
                     match modelname {
                         "cnn1" => {
                             net = cnn1(&vs.root());
+                            stack = Layers(vec![Layer::Other(String::from("cnn1"))]);
                         }
                         "fastnet1" => {
                             net = fast_resnet(&vs.root());
+                            stack = Layers(vec![Layer::Other(String::from("fastnet1"))]);
                         }
                         "fastnet2" => {
                             net = fast_resnet2(&vs.root());
+                            stack = Layers(vec![Layer::Other(String::from("fastnet2"))]);
                         }
                         _ => (),
                     }
@@ -623,6 +636,7 @@ pub fn cli() -> Result<()> {
                 let pre_trained = vec!["cnn1", "fastnet1", "fastnet2"];
                 if pre_trained.contains(&modelname) {
                     save_model(&vs, &path)?;
+                    save_net(&stack, modelname)?;
                 } else {
                     save_model(&vs, &path)?;
                     save_net(&stack, modelname)?;
@@ -740,11 +754,13 @@ pub fn from_stack(stack: &Layers, vs: &nn::Path) -> SequentialT {
                 out_channels,
                 Default::default(),
             )),
+            Layer::Relu() => model.add_fn(|x| x.relu()),
+            _ => model,
         })
 }
 impl Display for Layer {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        match *self {
+        match &*self {
             Layer::ConvLayer(ic, oc, ks, s, p, b) => {
                 write!(f, "ConvLayer({ic},{oc},{ks},{:?},{:?},{b})", s, p)
             }
@@ -752,6 +768,15 @@ impl Display for Layer {
             Layer::Dropout(p) => write!(f, "Dropout({p})"),
             Layer::Flatten() => write!(f, "Flatten"),
             Layer::Linear(ic, oc) => write!(f, "Linear({ic},{oc})"),
+            Layer::Relu() => write!(f, "Relu"),
+            Layer::Other(str) =>{
+                match str.as_str(){
+                    "cnn1" => write!(f,"ConvLayer(3,32,3,Some(1),Some(1),true)-> ConvLayer(32,64,3,None,Some(1),true)-> Maxpool(2)-> Dropout(0.25)-> ConvLayer(64,64,3,Some(1),Some(1),true)-> ConvLayer(64,128,3,Some(1),Some(1),true)-> Maxpool(2)-> Dropout(0.25)-> ConvLayer(128,128,3,Some(1),Some(1),true)-> ConvLayer(128,256,3,Some(1),Some(1),true)-> Maxpool(2)-> Dropout(0.25)-> Flatten-> Linear(4096,512)-> Linear(512,10)"),
+                    "fastnet1" =>write!(f,"ConvLayer(3,64,3,None,Some(1),true)-> ConvLayer(64,256,3,None,Some(1),true) -> Maxpool(4)-> Dropout(0.25)-> ConvLayer(256,512,3,None,Some(1),true)-> Maxpool(2)-> Maxpool(4)-> Flatten-> Linear(512,10)"),
+                    "fastnet2" =>write!(f,"ConvLayer(3,128,3,None,Some(1),true)-> ConvLayer(128,256,3,None,Some(1),true)-> Maxpool(4)-> Dropout(0.25)-> ConvLayer(256,256,3,None,Some(1),true)-> ConvLayer(256,512,3,None,Some(1),true)-> Maxpool(2)-> Dropout(0.25)-> Maxpool(4)->  Flatten-> Linear(512,10)" ),
+                    _ =>write!(f,""),
+                }
+            } ,
         }
     }
 }

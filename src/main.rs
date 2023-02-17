@@ -1,9 +1,9 @@
 use nnetwork::*;
 use anyhow::{Ok, Result};
-
 pub fn main() -> Result<()> {
 
     cli()?;
+
 
     Ok(())
 }
