@@ -208,45 +208,6 @@ pub fn fast_resnet(vs: &nn::Path) -> SequentialT {
         .add_fn(|x| x * 0.125)
 }
 
-pub fn test() -> Result<()> {
-    let m = tch::vision::cifar::load_dir("data")?;
-    let vs = nn::VarStore::new(Device::cuda_if_available());
-    let mut user_input = String::new();
-    let stdin = std::io::stdin();
-    stdin.read_line(&mut user_input)?;
-    println!("{:?}", user_input.as_str().trim());
-    let net = match user_input.as_str().trim() {
-        "1" => fast_resnet(&vs.root()),
-        "2" => fast_resnet2(&vs.root()),
-        _ => cnn1(&vs.root()),
-    };
-    let mut opt = nn::Sgd {
-        momentum: 0.9,
-        dampening: 0.,
-        wd: 5e-4,
-        nesterov: true,
-    }
-    .build(&vs, 0.)?;
-    for epoch in 1..35 {
-        opt.set_lr(learning_rate(epoch));
-        for (_i, (bimages, blabels)) in m
-            .train_iter(64)
-            .shuffle()
-            .to_device(vs.device())
-            .enumerate()
-        {
-            let bimages = tch::vision::dataset::augmentation(&bimages, true, 4, 8);
-            let pred = net.forward_t(&bimages, true);
-            let loss = pred.cross_entropy_for_logits(&blabels);
-            opt.backward_step(&loss);
-        }
-        let test_accuracy =
-            net.batch_accuracy_for_logits(&m.test_images, &m.test_labels, vs.device(), 512);
-        println!("epoch: {:4} test acc: {:5.2}%", epoch, 100. * test_accuracy,);
-    }
-    Ok(())
-}
-
 #[derive(Debug, Serialize, Deserialize)]
 pub enum Layer {
     ConvLayer(i64, i64, i64, Option<i64>, Option<i64>, bool),
