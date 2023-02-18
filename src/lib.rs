@@ -262,7 +262,7 @@ impl Model {
 /// - ### build
 ///     -> builds and returns the model
 ///
-pub fn construct_model(vs: &nn::Path) -> (SequentialT, Layers) {
+pub fn construct_model(vs: &nn::Path) -> Option<(SequentialT, Layers)> {
     let mut model = Model::new();
     loop {
         let mut user_input = String::new();
@@ -271,6 +271,21 @@ pub fn construct_model(vs: &nn::Path) -> (SequentialT, Layers) {
         let input = &user_input.trim().split(" ").collect::<Vec<&str>>();
         if input[0] == "build" {
             break;
+        } else if input[0] == "help" {
+            println!("Available commands are \"add\" and \"build\" and \"abort\".
+            possible arguments for add are:
+            add conv_layer in_c out_c k_size [\"--default\" | stride padding] :
+                Adds a convolution layer with in_c in channels, out_c output channels, k_size kernel size and stride and padding (default values are 0, 1)
+            add maxpool k_size :
+                Adds a 2D maxpool layer with kernel size (k_size,k,size)
+            add dropout p :
+                Adds a Dropout layer with dropout probability = p
+            add linear in_f out_f :
+                Adds a Linear layer with in_f in features and out_f output features
+            add flatten :
+                Adds a layer that flattens all dimensions, except the first, which is understood as batch size
+            add relu :
+                Adds an activation layer for the function relu(x) = max(0,x)");
         } else if input[0] == "add" {
             assert!(
                 input.len() >= 2,
@@ -428,6 +443,8 @@ pub fn construct_model(vs: &nn::Path) -> (SequentialT, Layers) {
                 println!("Unknown layer name!");
                 continue;
             }
+        } else if input[0] == "abort"{
+            return None;
         } else {
             println!("Unknown command \"{}\"! Valid commands are:\n add layer_name [layer_options]\n build",input[0])
         }
@@ -460,7 +477,7 @@ pub fn construct_model(vs: &nn::Path) -> (SequentialT, Layers) {
             Layer::Relu() => model.add_fn(|x| x.relu()),
             _ => model,
         });
-    (net, model.stack)
+    Some((net, model.stack))
 }
 
 pub fn train_model(
@@ -654,7 +671,11 @@ pub fn cli() -> Result<()> {
                     println!("This command does not take any arguments, they will be ignored!");
                 }
                 vs = tch::nn::VarStore::new(tch::Device::cuda_if_available());
-                (net, stack) = construct_model(&vs.root());
+                (net, stack) = if let Some((t1,t2)) = construct_model(&vs.root()){
+                    (t1,t2)
+                } else {
+                    continue;
+                };
                 loaded_model = true;
                 println!("Model successfully built.");
             }
